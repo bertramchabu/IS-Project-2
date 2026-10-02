@@ -16,14 +16,34 @@ class NetVisionAI extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(
+    return MaterialApp(
+      title: 'NetVision AI',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        colorSchemeSeed: Colors.cyan,
+        useMaterial3: true
+        
+      ),
+      home: const Scaffold(
         body: Center(
-          child: Text("NetVisionAI", style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold
-          ),),
-        ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.radar, size: 96, color: Colors.cyanAccent,),
+              SizedBox(height: 24,),
+              Text(
+                'NetVision AI',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold
+                ),
+              ),
+              SizedBox(height: 8,),
+              Text('Firebase connected!'),
+
+          ],),
+        )
       ),
     );
   }
