@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "823236743234",
+    "project_id": "netvision-ai-0",
+    "storage_bucket": "netvision-ai-0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:823236743234:android:79bc15917cd2d9fe855ddb",
+        "android_client_info": {
+          "package_name": "com.strathmore.netvision.netvision_ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDiBvbvV87VFuQh0vErY-qbIlvB_xCICc4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
