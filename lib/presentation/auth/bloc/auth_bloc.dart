@@ -55,6 +55,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       emit(AuthAuthenticated(profile));
     } catch (err) {
+      print(err);
       emit(AuthError(_mapError(err)));
     }
   }

@@ -25,7 +25,7 @@ class AuthRepository {
     required String password,
   }) async {
     final cred = await _auth.signInWithEmailAndPassword(
-      email: email.trim(),
+      email: email,
       password: password,
     );
 

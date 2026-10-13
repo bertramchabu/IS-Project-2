@@ -32,7 +32,7 @@ class _LoginPageState extends State<LoginPage> {
 
     context.read<AuthBloc>().add(
           AuthLoginRequested(
-            email: _emailController.text.trim(),
+            email: _emailController.text,
             password: _passwordController.text,
           ),
         );
