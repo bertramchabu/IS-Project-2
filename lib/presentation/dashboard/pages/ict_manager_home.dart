@@ -97,11 +97,13 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                     children: [
                       pw.Text(
                         'Generated: $nowStr',
-                        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+                        style: const pw.TextStyle(
+                            fontSize: 9, color: PdfColors.grey600),
                       ),
                       pw.Text(
                         'Author: ${user?.username ?? 'ICT Manager'} (${user?.role.displayName ?? 'Manager'})',
-                        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+                        style: const pw.TextStyle(
+                            fontSize: 9, color: PdfColors.grey600),
                       ),
                     ],
                   ),
@@ -113,7 +115,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
               // Executive Summary Text
               pw.Text(
                 '1. Executive Summary',
-                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                style:
+                    pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
               ),
               pw.SizedBox(height: 6),
               pw.Text(
@@ -123,28 +126,46 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                 'and exceeding the Tier-3 enterprise SLA requirement (99.5%). 28 potential high-severity '
                 'fault precursors were anticipated by the model with an average detection lead time of '
                 '1.4 seconds, allowing automated early-warning alerts before customer service degradation.',
-                style: const pw.TextStyle(fontSize: 10, lineHeight: 1.4),
+                style: const pw.TextStyle(fontSize: 10),
               ),
               pw.SizedBox(height: 14),
 
               // KPI Table
               pw.Text(
                 '2. Core Infrastructure & SLA Performance',
-                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                style:
+                    pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
               ),
               pw.SizedBox(height: 8),
               pw.TableHelper.fromTextArray(
-                headers: ['Metric', 'Target Benchmark', 'Achieved Value', 'Compliance Status'],
+                headers: [
+                  'Metric',
+                  'Target Benchmark',
+                  'Achieved Value',
+                  'Compliance Status'
+                ],
                 data: [
-                  ['Network Uptime / Availability', '>= 99.50%', '99.85%', 'EXCEEDED'],
-                  ['Mean Time Between Failures (MTBF)', '>= 120 hrs', '142.6 hrs', 'EXCEEDED'],
+                  [
+                    'Network Uptime / Availability',
+                    '>= 99.50%',
+                    '99.85%',
+                    'EXCEEDED'
+                  ],
+                  [
+                    'Mean Time Between Failures (MTBF)',
+                    '>= 120 hrs',
+                    '142.6 hrs',
+                    'EXCEEDED'
+                  ],
                   ['Average Core Latency', '<= 60 ms', '38.4 ms', 'OPTIMAL'],
                   ['Average Packet Jitter', '<= 25 ms', '9.2 ms', 'OPTIMAL'],
                   ['Overall Packet Loss', '<= 1.0%', '0.18%', 'OPTIMAL'],
                 ],
-                headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+                headerStyle:
+                    pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
                 cellStyle: const pw.TextStyle(fontSize: 9),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration:
+                    const pw.BoxDecoration(color: PdfColors.grey200),
                 cellHeight: 22,
               ),
               pw.SizedBox(height: 14),
@@ -152,22 +173,60 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
               // Model Predictive Performance
               pw.Text(
                 '3. BiLSTM Machine Learning Model Effectiveness (v1.2.0)',
-                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                style:
+                    pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
               ),
               pw.SizedBox(height: 8),
               pw.TableHelper.fromTextArray(
-                headers: ['AI Model Parameter', 'Research Target', 'Achieved Result', 'Evaluation'],
-                data: [
-                  ['Model Architecture', 'Lightweight BiLSTM', '2x 64 Units (Dropout 0.2)', 'Holdout Validated'],
-                  ['Fault Prediction F1-Score', '>= 0.85', '0.872', 'Objective II Achieved'],
-                  ['Root Mean Squared Error (RMSE)', '<= 0.10', '0.078', 'Objective II Achieved'],
-                  ['Detection / Notification Time', '<= 2.0 seconds', '1.42 seconds', 'Objective III Achieved'],
-                  ['Adaptive Reduction Efficiency', '90% under normal', '91.4% reduction', 'Objective III Achieved'],
-                  ['False Positive Rate', '<= 10.0%', '4.8%', 'Alert Fatigue Reduced'],
+                headers: [
+                  'AI Model Parameter',
+                  'Research Target',
+                  'Achieved Result',
+                  'Evaluation'
                 ],
-                headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+                data: [
+                  [
+                    'Model Architecture',
+                    'Lightweight BiLSTM',
+                    '2x 64 Units (Dropout 0.2)',
+                    'Holdout Validated'
+                  ],
+                  [
+                    'Fault Prediction F1-Score',
+                    '>= 0.85',
+                    '0.872',
+                    'Objective II Achieved'
+                  ],
+                  [
+                    'Root Mean Squared Error (RMSE)',
+                    '<= 0.10',
+                    '0.078',
+                    'Objective II Achieved'
+                  ],
+                  [
+                    'Detection / Notification Time',
+                    '<= 2.0 seconds',
+                    '1.42 seconds',
+                    'Objective III Achieved'
+                  ],
+                  [
+                    'Adaptive Reduction Efficiency',
+                    '90% under normal',
+                    '91.4% reduction',
+                    'Objective III Achieved'
+                  ],
+                  [
+                    'False Positive Rate',
+                    '<= 10.0%',
+                    '4.8%',
+                    'Alert Fatigue Reduced'
+                  ],
+                ],
+                headerStyle:
+                    pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
                 cellStyle: const pw.TextStyle(fontSize: 9),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration:
+                    const pw.BoxDecoration(color: PdfColors.grey200),
                 cellHeight: 22,
               ),
               pw.SizedBox(height: 14),
@@ -175,19 +234,23 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
               // Recommendations
               pw.Text(
                 '4. Management Recommendations',
-                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                style:
+                    pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
               ),
               pw.SizedBox(height: 6),
               pw.Bullet(
-                text: 'Maintain the adaptive 70% fault probability threshold for automated technician dispatch.',
+                text:
+                    'Maintain the adaptive 70% fault probability threshold for automated technician dispatch.',
                 style: const pw.TextStyle(fontSize: 9),
               ),
               pw.Bullet(
-                text: 'Expand edge node registration to Western and Coastal regional data corridors.',
+                text:
+                    'Expand edge node registration to Western and Coastal regional data corridors.',
                 style: const pw.TextStyle(fontSize: 9),
               ),
               pw.Bullet(
-                text: 'Retain quarterly model retraining schedule with ongoing real-time multivariate logs.',
+                text:
+                    'Retain quarterly model retraining schedule with ongoing real-time multivariate logs.',
                 style: const pw.TextStyle(fontSize: 9),
               ),
             ];
@@ -197,9 +260,11 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
 
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => doc.save(),
-        name: 'NetVision_AI_Executive_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+        name:
+            'NetVision_AI_Executive_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
       );
     } catch (e) {
+      print('[ICTManagerHome] Error generating PDF: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -218,9 +283,11 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
       SnackBar(
         content: const Row(
           children: [
-            Icon(Icons.download_done_rounded, color: _ICTColors.healthy, size: 18),
+            Icon(Icons.download_done_rounded,
+                color: _ICTColors.healthy, size: 18),
             SizedBox(width: 8),
-            Text('Historical KPI & Prediction Logs exported to CSV successfully'),
+            Text(
+                'Historical KPI & Prediction Logs exported to CSV successfully'),
           ],
         ),
         backgroundColor: _ICTColors.surfaceAlt,
@@ -361,9 +428,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
         const SizedBox(width: 12),
         // User Profile Clickable Chip
         InkWell(
-          onTap: user == null
-              ? null
-              : () => UserProfileDialog.show(context, user),
+          onTap:
+              user == null ? null : () => UserProfileDialog.show(context, user),
           borderRadius: BorderRadius.circular(20),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -612,7 +678,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                 decoration: BoxDecoration(
                   color: _ICTColors.healthy.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: _ICTColors.healthy.withOpacity(0.3)),
+                  border:
+                      Border.all(color: _ICTColors.healthy.withOpacity(0.3)),
                 ),
                 child: const Text(
                   'MODEL v1.2.0 • ACTIVE',
@@ -628,15 +695,20 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
           const SizedBox(height: 18),
 
           // Objective Validation Metrics Table
-          _buildEvaluationRow('F1-Score (Holdout Test)', '0.872', 'Target >= 0.85', true),
+          _buildEvaluationRow(
+              'F1-Score (Holdout Test)', '0.872', 'Target >= 0.85', true),
           const Divider(height: 16, color: _ICTColors.border),
-          _buildEvaluationRow('Root Mean Square Error (RMSE)', '0.078', 'Target <= 0.10', true),
+          _buildEvaluationRow(
+              'Root Mean Square Error (RMSE)', '0.078', 'Target <= 0.10', true),
           const Divider(height: 16, color: _ICTColors.border),
-          _buildEvaluationRow('Average Anticipation Latency', '1.42 sec', 'Target <= 2.0 sec', true),
+          _buildEvaluationRow('Average Anticipation Latency', '1.42 sec',
+              'Target <= 2.0 sec', true),
           const Divider(height: 16, color: _ICTColors.border),
-          _buildEvaluationRow('Adaptive Compute Reduction', '91.4%', 'Target >= 90%', true),
+          _buildEvaluationRow(
+              'Adaptive Compute Reduction', '91.4%', 'Target >= 90%', true),
           const Divider(height: 16, color: _ICTColors.border),
-          _buildEvaluationRow('False Positive Alarm Rate', '4.8%', 'Target < 10%', true),
+          _buildEvaluationRow(
+              'False Positive Alarm Rate', '4.8%', 'Target < 10%', true),
         ],
       ),
     );
@@ -660,7 +732,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
             ),
             Text(
               benchmark,
-              style: const TextStyle(fontSize: 10.5, color: _ICTColors.textMuted),
+              style:
+                  const TextStyle(fontSize: 10.5, color: _ICTColors.textMuted),
             ),
           ],
         ),
@@ -746,7 +819,15 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                     sideTitles: SideTitles(
                       showTitles: true,
                       getTitlesWidget: (val, meta) {
-                        const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                        const days = [
+                          'Mon',
+                          'Tue',
+                          'Wed',
+                          'Thu',
+                          'Fri',
+                          'Sat',
+                          'Sun'
+                        ];
                         final idx = val.toInt();
                         if (idx >= 0 && idx < days.length) {
                           return Padding(
@@ -778,8 +859,10 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                       },
                     ),
                   ),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                 ),
                 gridData: FlGridData(
                   show: true,
@@ -807,7 +890,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
     );
   }
 
-  BarChartGroupData _barGroup(int x, double crit, double high, double med, double low) {
+  BarChartGroupData _barGroup(
+      int x, double crit, double high, double med, double low) {
     return BarChartGroupData(
       x: x,
       barRods: [
@@ -818,8 +902,10 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
           rodStackItems: [
             BarChartRodStackItem(0, low, _ICTColors.healthy),
             BarChartRodStackItem(low, low + med, _ICTColors.warning),
-            BarChartRodStackItem(low + med, low + med + high, const Color(0xFFFB923C)),
-            BarChartRodStackItem(low + med + high, low + med + high + crit, _ICTColors.critical),
+            BarChartRodStackItem(
+                low + med, low + med + high, const Color(0xFFFB923C)),
+            BarChartRodStackItem(
+                low + med + high, low + med + high + crit, _ICTColors.critical),
           ],
         ),
       ],
@@ -830,9 +916,13 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: color)),
+        Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color)),
         const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 10, color: _ICTColors.textMuted)),
+        Text(label,
+            style: const TextStyle(fontSize: 10, color: _ICTColors.textMuted)),
       ],
     );
   }
@@ -882,7 +972,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton.icon(
-                    onPressed: _isExporting ? null : () => _exportPdfReport(user),
+                    onPressed:
+                        _isExporting ? null : () => _exportPdfReport(user),
                     icon: _isExporting
                         ? const SizedBox(
                             width: 14,
@@ -893,7 +984,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                             ),
                           )
                         : const Icon(Icons.picture_as_pdf_rounded, size: 16),
-                    label: Text(_isExporting ? 'Generating...' : 'Export as PDF'),
+                    label:
+                        Text(_isExporting ? 'Generating...' : 'Export as PDF'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _ICTColors.accent,
                       foregroundColor: const Color(0xFF0A0E17),

@@ -42,3 +42,11 @@ class NodesUpdated extends KpiEvent {
   @override
   List<Object?> get props => [nodes];
 }
+class KpiStreamError extends KpiEvent {
+  final String message;
+
+  const KpiStreamError(this.message);
+
+  @override
+  List<Object?> get props => [message];
+}

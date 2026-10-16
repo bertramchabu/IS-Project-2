@@ -12,6 +12,14 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
+void _sendPasswordReset() {
+  if (!_formKey.currentState!.validate()) return;
+
+  context.read<AuthBloc>().add(
+        AuthPasswordResetRequested(_emailController.text.trim()),
+      );
+}
+
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
@@ -43,17 +51,24 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       body: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
-          if (state is AuthError) {
+          if (state is AuthError && state.user == null) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.message),
                 backgroundColor: Colors.red.shade700,
               ),
             );
+          } else if (state is AuthPasswordResetSent) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Password reset email sent. Check your inbox.'),
+              ),
+            );
           }
         },
         builder: (context, state) {
-          final isLoading = state is AuthLoading;
+          final isLoading =
+              state is AuthLoading || state is AuthPasswordResetting;
 
           return Center(
             child: SingleChildScrollView(
@@ -127,6 +142,13 @@ class _LoginPageState extends State<LoginPage> {
                           if (v.length < 6) return 'Min 6 characters';
                           return null;
                         },
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: isLoading ? null : _sendPasswordReset,
+                          child: const Text('Forgot password?'),
+                        ),
                       ),
                       const SizedBox(height: 24),
                       SizedBox(

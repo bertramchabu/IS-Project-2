@@ -13,6 +13,12 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
     on<PredictionStarted>(_onStarted);
   }
 
+  @override
+  void onError(Object error, StackTrace stackTrace) {
+    print('[PredictionBloc] Unhandled error: $error');
+    super.onError(error, stackTrace);
+  }
+
   Future<void> _onStarted(
     PredictionStarted event,
     Emitter<PredictionState> emit,
@@ -21,7 +27,10 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
     await _sub?.cancel();
     _sub = _repo.watchLatestPrediction(event.nodeId).listen(
       (prediction) => emit(PredictionLoaded(prediction)),
-      onError: (e) => emit(PredictionError(e.toString())),
+      onError: (e) {
+        print('[PredictionBloc] Prediction stream error: $e');
+        emit(PredictionError(e.toString()));
+      },
     );
   }
 

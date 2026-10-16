@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/models/kpi_metric_model.dart';
 import '../../../data/models/network_node_model.dart';
+import '../../../data/models/user_models.dart';
 import '../../../di/service_locator.dart' as di;
 import '../../alerts/bloc/alert_bloc.dart';
 import '../../alerts/bloc/alert_event.dart';

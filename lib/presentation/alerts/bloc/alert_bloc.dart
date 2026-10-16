@@ -16,20 +16,25 @@ class AlertBloc extends Bloc<AlertEvent, AlertState> {
     on<AlertStatusFilterChanged>(_onFilterChanged);
     on<AlertAcknowledged>(_onAcknowledged);
     on<AlertDismissed>(_onDismissed);
-    on<_AlertsReceived>(_onReceived);
+    on<AlertsReceived>(_onReceived);
+    on<AlertStreamError>(_onStreamError);
+  }
+
+  @override
+  void onError(Object error, StackTrace stackTrace) {
+    print('[AlertBloc] Unhandled error: $error');
+    super.onError(error, stackTrace);
   }
 
   Future<void> _onStarted(
     AlertsStarted event,
     Emitter<AlertState> emit,
   ) async {
-    emit(const AlertLoading());
-    await _sub?.cancel();
     _sub = _repo
         .watchAlerts(statusFilter: _currentFilter)
         .listen(
-          (alerts) => add(_AlertsReceived(alerts)),
-          onError: (e) => emit(AlertError(e.toString())),
+          (alerts) => add(AlertsReceived(alerts)),
+          onError: (e) => add(AlertStreamError(e.toString())),
         );
   }
 
@@ -42,7 +47,7 @@ class AlertBloc extends Bloc<AlertEvent, AlertState> {
   }
 
   Future<void> _onReceived(
-    _AlertsReceived event,
+    AlertsReceived event,
     Emitter<AlertState> emit,
   ) async {
     emit(AlertLoaded(
@@ -66,6 +71,7 @@ class AlertBloc extends Bloc<AlertEvent, AlertState> {
         ));
       }
     } catch (e) {
+      print('[AlertBloc] Failed to acknowledge alert: $e');
       emit(AlertError('Failed to acknowledge: ${e.toString()}'));
     }
   }
@@ -89,6 +95,7 @@ class AlertBloc extends Bloc<AlertEvent, AlertState> {
         ));
       }
     } catch (e) {
+      print('[AlertBloc] Failed to dismiss alert: $e');
       emit(AlertError('Failed to dismiss: ${e.toString()}'));
     }
   }
@@ -98,4 +105,11 @@ class AlertBloc extends Bloc<AlertEvent, AlertState> {
     _sub?.cancel();
     return super.close();
   }
+}
+Future<void> _onStreamError(
+  AlertStreamError event,
+  Emitter<AlertState> emit,
+) async {
+  print('[AlertBloc] Alert stream error: ${event.message}');
+  emit(AlertError(event.message));
 }

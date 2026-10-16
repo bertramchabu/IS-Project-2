@@ -26,6 +26,15 @@ class AuthLoginRequested extends AuthEvent {
   List<Object?> get props => [email, password];
 }
 
+class AuthPasswordResetRequested extends AuthEvent {
+  final String email;
+
+  const AuthPasswordResetRequested(this.email);
+
+  @override
+  List<Object?> get props => [email];
+}
+
 /// Fired when the user taps "Logout".
 class AuthLogoutRequested extends AuthEvent {
   const AuthLogoutRequested();

@@ -9,26 +9,39 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthBloc(this._repo) : super(const AuthInitial()) {
     on<AuthCheckRequested>(_onCheckRequested);
     on<AuthLoginRequested>(_onLoginRequested);
+    on<AuthPasswordResetRequested>(_onPasswordResetRequested);
     on<AuthLogoutRequested>(_onLogoutRequested);
     on<AuthProfileUpdateRequested>(_onProfileUpdateRequested);
+  }
+
+  @override
+  void onError(Object error, StackTrace stackTrace) {
+    print('[AuthBloc] Unhandled error: $error');
+    super.onError(error, stackTrace);
   }
 
   Future<void> _onCheckRequested(
     AuthCheckRequested event,
     Emitter<AuthState> emit,
   ) async {
-    final user = _repo.currentUser;
-    if (user == null) {
-      return emit(const AuthUnauthenticated());
-    }
+    emit(const AuthChecking());
+    try {
+      final user = _repo.currentUser;
+      if (user == null) {
+        return emit(const AuthUnauthenticated());
+      }
 
-    final profile = await _repo.getUserProfile(user.uid);
-    if (profile == null || !profile.isActive) {
-      await _repo.signOut();
-      return emit(const AuthUnauthenticated());
-    }
+      final profile = await _repo.getUserProfile(user.uid);
+      if (profile == null || !profile.isActive) {
+        await _repo.signOut();
+        return emit(const AuthUnauthenticated());
+      }
 
-    emit(AuthAuthenticated(profile));
+      emit(AuthAuthenticated(profile));
+    } catch (error) {
+      print('[AuthBloc] Failed to restore session: $error');
+      emit(AuthError('Unable to verify your session. Please try again.'));
+    }
   }
 
   Future<void> _onLoginRequested(
@@ -46,18 +59,35 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final profile = await _repo.getUserProfile(cred.user!.uid);
 
       if (profile == null) {
+        print('[AuthBloc] Login failed: user profile not found.');
         return emit(const AuthError('User profile not found.'));
       }
 
       if (!profile.isActive) {
         await _repo.signOut();
+        print('[AuthBloc] Login blocked: account is deactivated.');
         return emit(const AuthError('Account is deactivated. Contact admin.'));
       }
 
+      await _repo.recordSuccessfulLogin(profile.userId);
       emit(AuthAuthenticated(profile));
     } catch (err) {
-      print(err);
+      print('[AuthBloc] Login failed: $err');
       emit(AuthError(_mapError(err)));
+    }
+  }
+
+  Future<void> _onPasswordResetRequested(
+    AuthPasswordResetRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(const AuthPasswordResetting());
+    try {
+      await _repo.sendPasswordResetEmail(event.email);
+      emit(const AuthPasswordResetSent());
+    } catch (error) {
+      print('[AuthBloc] Password reset failed: $error');
+      emit(AuthError(_mapError(error)));
     }
   }
 
@@ -65,8 +95,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthLogoutRequested event,
     Emitter<AuthState> emit,
   ) async {
-    await _repo.signOut();
-    emit(const AuthUnauthenticated());
+    try {
+      await _repo.signOut();
+      emit(const AuthUnauthenticated());
+    } catch (error) {
+      print('[AuthBloc] Logout failed: $error');
+      final current = state;
+      emit(AuthError(
+        'Unable to sign out. Please try again.',
+        user: current is AuthAuthenticated ? current.user : null,
+      ));
+    }
   }
 
   Future<void> _onProfileUpdateRequested(
@@ -86,14 +125,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
       emit(AuthAuthenticated(updated));
     } catch (err) {
-      // Keep authenticated with current user on error
-      emit(AuthAuthenticated(current.user));
+      print('[AuthBloc] Profile update failed: $err');
+      emit(AuthError(
+        'Unable to update your profile. Please try again.',
+        user: current.user,
+      ));
     }
   }
 
   String _mapError(Object e) {
     final s = e.toString();
-    if (s.contains('user-not-found')) return 'No account found with that email.';
+    if (s.contains('user-not-found'))
+      return 'No account found with that email.';
     if (s.contains('wrong-password')) return 'Incorrect password.';
     if (s.contains('invalid-email')) return 'Invalid email format.';
     if (s.contains('user-disabled')) return 'This account has been disabled.';

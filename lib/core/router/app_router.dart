@@ -12,7 +12,14 @@ class AppRouter {
     if (state is AuthAuthenticated) {
       return _homeForRole(state.user);
     }
-    // Initial, Unauthenticated, Loading, Error → login page
+    if (state is AuthError && state.user != null) {
+      return _homeForRole(state.user!);
+    }
+    if (state is AuthInitial || state is AuthChecking) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     return const LoginPage();
   }
 

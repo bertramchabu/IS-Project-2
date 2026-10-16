@@ -51,11 +51,18 @@ class AlertDismissed extends AlertEvent {
 }
 
 /// Internal event fired when the Firestore stream emits.
-class _AlertsReceived extends AlertEvent {
+class AlertsReceived extends AlertEvent {
   final List<AlertModel> alerts;
 
-  const _AlertsReceived(this.alerts);
+  const AlertsReceived(this.alerts);
 
   @override
   List<Object?> get props => [alerts];
+}
+class AlertStreamError extends AlertEvent {
+  final String message;
+  const AlertStreamError(this.message);
+
+  @override
+  List<Object?> get props => [message];
 }

@@ -19,7 +19,6 @@ class AuthRepository {
   User? get currentUser => _auth.currentUser;
 
   /// Sign in with email and password.
-  /// Also updates `lastLogin` in Firestore on success.
   Future<UserCredential> signIn({
     required String email,
     required String password,
@@ -29,13 +28,13 @@ class AuthRepository {
       password: password,
     );
 
-    if (cred.user != null) {
-      await _firestore.collection('users').doc(cred.user!.uid).update({
-        'lastLogin': FieldValue.serverTimestamp(),
-      });
-    }
-
     return cred;
+  }
+
+  Future<void> recordSuccessfulLogin(String userId) {
+    return _firestore.collection('users').doc(userId).update({
+      'lastLogin': FieldValue.serverTimestamp(),
+    });
   }
 
   /// Sign out the current user.

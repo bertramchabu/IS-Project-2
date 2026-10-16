@@ -19,6 +19,18 @@ class AuthLoading extends AuthState {
   const AuthLoading();
 }
 
+class AuthChecking extends AuthState {
+  const AuthChecking();
+}
+
+class AuthPasswordResetting extends AuthState {
+  const AuthPasswordResetting();
+}
+
+class AuthPasswordResetSent extends AuthState {
+  const AuthPasswordResetSent();
+}
+
 /// User is signed in and profile loaded.
 class AuthAuthenticated extends AuthState {
   final UserModel user;
@@ -37,9 +49,10 @@ class AuthUnauthenticated extends AuthState {
 /// An error occurred during login or profile load.
 class AuthError extends AuthState {
   final String message;
+  final UserModel? user;
 
-  const AuthError(this.message);
+  const AuthError(this.message, {this.user});
 
   @override
-  List<Object?> get props => [message];
+  List<Object?> get props => [message, user];
 }
