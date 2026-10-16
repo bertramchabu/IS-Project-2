@@ -100,4 +100,31 @@ class UserModel {
         'lastLogin': lastLogin != null ? Timestamp.fromDate(lastLogin!) : null,
         'updatedAt': Timestamp.fromDate(updatedAt),
       };
+
+  UserModel copyWith({
+    String? username,
+    String? email,
+    UserRole? role,
+    String? department,
+    String? phoneNumber,
+    bool? isActive,
+    bool? mfaEnabled,
+    DateTime? createdAt,
+    DateTime? lastLogin,
+    DateTime? updatedAt,
+  }) {
+    return UserModel(
+      userId: userId,
+      username: username ?? this.username,
+      email: email ?? this.email,
+      role: role ?? this.role,
+      department: department ?? this.department,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      isActive: isActive ?? this.isActive,
+      mfaEnabled: mfaEnabled ?? this.mfaEnabled,
+      createdAt: createdAt ?? this.createdAt,
+      lastLogin: lastLogin ?? this.lastLogin,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
 }

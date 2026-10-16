@@ -10,6 +10,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthCheckRequested>(_onCheckRequested);
     on<AuthLoginRequested>(_onLoginRequested);
     on<AuthLogoutRequested>(_onLogoutRequested);
+    on<AuthProfileUpdateRequested>(_onProfileUpdateRequested);
   }
 
   Future<void> _onCheckRequested(
@@ -66,6 +67,28 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     await _repo.signOut();
     emit(const AuthUnauthenticated());
+  }
+
+  Future<void> _onProfileUpdateRequested(
+    AuthProfileUpdateRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    final current = state;
+    if (current is! AuthAuthenticated) return;
+
+    try {
+      final updated = await _repo.updateUserProfile(
+        userId: current.user.userId,
+        username: event.username,
+        department: event.department,
+        phoneNumber: event.phoneNumber,
+        mfaEnabled: event.mfaEnabled,
+      );
+      emit(AuthAuthenticated(updated));
+    } catch (err) {
+      // Keep authenticated with current user on error
+      emit(AuthAuthenticated(current.user));
+    }
   }
 
   String _mapError(Object e) {

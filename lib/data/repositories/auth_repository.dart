@@ -53,4 +53,30 @@ class AuthRepository {
   Future<void> sendPasswordResetEmail(String email) {
     return _auth.sendPasswordResetEmail(email: email.trim());
   }
+
+  /// Update the user's profile in Firestore and return updated UserModel.
+  Future<UserModel> updateUserProfile({
+    required String userId,
+    required String username,
+    String? department,
+    String? phoneNumber,
+    bool? mfaEnabled,
+  }) async {
+    final updates = <String, dynamic>{
+      'username': username.trim(),
+      'department': department?.trim(),
+      'phoneNumber': phoneNumber?.trim(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (mfaEnabled != null) {
+      updates['mfaEnabled'] = mfaEnabled;
+    }
+
+    await _firestore.collection('users').doc(userId).update(updates);
+    final updated = await getUserProfile(userId);
+    if (updated == null) {
+      throw Exception('Failed to load profile after update.');
+    }
+    return updated;
+  }
 }

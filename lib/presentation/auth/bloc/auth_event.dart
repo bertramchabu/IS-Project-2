@@ -30,3 +30,21 @@ class AuthLoginRequested extends AuthEvent {
 class AuthLogoutRequested extends AuthEvent {
   const AuthLogoutRequested();
 }
+
+/// Fired when the user updates their profile.
+class AuthProfileUpdateRequested extends AuthEvent {
+  final String username;
+  final String? department;
+  final String? phoneNumber;
+  final bool? mfaEnabled;
+
+  const AuthProfileUpdateRequested({
+    required this.username,
+    this.department,
+    this.phoneNumber,
+    this.mfaEnabled,
+  });
+
+  @override
+  List<Object?> get props => [username, department, phoneNumber, mfaEnabled];
+}
