@@ -12,6 +12,12 @@ class PredictionModel {
   final bool adaptiveReductionApplied;
   final DateTime predictionTimestamp;
   final String triggeredBy;
+  final String? operationalStatus;
+  final String? message;
+  final int? computationalSavingsPercent;
+  final double? nextSamplingIntervalSeconds;
+  final double? modelF1Score;
+  final double? modelRmse;
 
   const PredictionModel({
     required this.predictionId,
@@ -24,6 +30,12 @@ class PredictionModel {
     required this.adaptiveReductionApplied,
     required this.predictionTimestamp,
     required this.triggeredBy,
+    this.operationalStatus,
+    this.message,
+    this.computationalSavingsPercent,
+    this.nextSamplingIntervalSeconds,
+    this.modelF1Score,
+    this.modelRmse,
   });
 
   factory PredictionModel.fromFirestore(
@@ -48,6 +60,14 @@ class PredictionModel {
       predictionTimestamp:
           (d['predictionTimestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
       triggeredBy: d['triggeredBy'] as String? ?? 'BiLSTM Inference',
+      operationalStatus: d['status'] as String?,
+      message: d['message'] as String?,
+      computationalSavingsPercent:
+          (d['computationalSavingsPercent'] as num?)?.toInt(),
+      nextSamplingIntervalSeconds:
+          (d['nextSamplingIntervalSeconds'] as num?)?.toDouble(),
+      modelF1Score: (d['modelF1Score'] as num?)?.toDouble(),
+      modelRmse: (d['modelRmse'] as num?)?.toDouble(),
     );
   }
 

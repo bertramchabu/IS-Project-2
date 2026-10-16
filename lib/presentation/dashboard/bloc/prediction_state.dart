@@ -18,11 +18,36 @@ class PredictionLoading extends PredictionState {
 
 class PredictionLoaded extends PredictionState {
   final PredictionModel? prediction;
+  final bool modelApiOnline;
+  final bool modelLoaded;
+  final String modelVersion;
+  final double? modelF1Score;
+  final double? modelRmse;
+  final String? statusMessage;
+  final String predictionSource;
 
-  const PredictionLoaded(this.prediction);
+  const PredictionLoaded(
+    this.prediction, {
+    this.modelApiOnline = false,
+    this.modelLoaded = false,
+    this.modelVersion = 'unknown',
+    this.modelF1Score,
+    this.modelRmse,
+    this.statusMessage,
+    this.predictionSource = 'Firestore',
+  });
 
   @override
-  List<Object?> get props => [prediction];
+  List<Object?> get props => [
+        prediction,
+        modelApiOnline,
+        modelLoaded,
+        modelVersion,
+        modelF1Score,
+        modelRmse,
+        statusMessage,
+        predictionSource,
+      ];
 }
 
 class PredictionError extends PredictionState {
