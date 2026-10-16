@@ -51,7 +51,7 @@ class KpiBloc extends Bloc<KpiEvent, KpiState> {
     final nodes = event.nodes;
 
     if (nodes.isEmpty) {
-      return emit(KpiLoaded(nodes: nodes as List<NetworkNodeModel>));
+      return emit(KpiLoaded(nodes: nodes));
     }
 
     // First load: auto-select the first node
@@ -60,12 +60,12 @@ class KpiBloc extends Bloc<KpiEvent, KpiState> {
       // Defer selection so we don't emit twice in the same handler
       add(NodeSelected(nodes.first.nodeId));
       return emit(KpiLoaded(
-        nodes: nodes as List<NetworkNodeModel>,
+        nodes: nodes,
         selectedNode: nodes.first,
       ));
     }
 
-    emit(current.copyWith(nodes: nodes as List<NetworkNodeModel>));
+    emit(current.copyWith(nodes: nodes));
   }
 
   Future<void> _onNodeSelected(

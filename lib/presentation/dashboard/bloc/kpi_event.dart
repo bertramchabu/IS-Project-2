@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../../data/models/kpi_metric_model.dart';
+import '../../../data/models/network_node_model.dart';
 
 abstract class KpiEvent extends Equatable {
   const KpiEvent();
@@ -35,7 +36,7 @@ class KpiMetricsUpdated extends KpiEvent {
 
 /// Internal event for when the node list updates.
 class NodesUpdated extends KpiEvent {
-  final List nodes;
+  final List<NetworkNodeModel> nodes;
 
   const NodesUpdated(this.nodes);
 

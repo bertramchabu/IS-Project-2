@@ -56,3 +56,9 @@ class AuthError extends AuthState {
   @override
   List<Object?> get props => [message, user];
 }
+
+UserModel? authenticatedUserFrom(AuthState state) {
+  if (state is AuthAuthenticated) return state.user;
+  if (state is AuthError) return state.user;
+  return null;
+}

@@ -7,6 +7,7 @@ import '../data/repositories/node_repository.dart';
 import '../data/repositories/kpi_repository.dart';
 import '../data/repositories/alert_repository.dart';
 import '../data/repositories/prediction_repository.dart';
+import '../data/repositories/model_inference_repository.dart';
 
 import '../presentation/auth/bloc/auth_bloc.dart';
 import '../presentation/dashboard/bloc/kpi_bloc.dart';
@@ -44,6 +45,9 @@ Future<void> init() async {
   sl.registerLazySingleton<PredictionRepository>(
     () => PredictionRepository(firestore: sl<FirebaseFirestore>()),
   );
+  sl.registerLazySingleton<ModelInferenceRepository>(
+    () => ModelInferenceRepository(),
+  );
 
   // ---------- Blocs ----------
   sl.registerFactory<AuthBloc>(() => AuthBloc(sl<AuthRepository>()));
@@ -55,6 +59,9 @@ Future<void> init() async {
   );
   sl.registerFactory<AlertBloc>(() => AlertBloc(sl<AlertRepository>()));
   sl.registerFactory<PredictionBloc>(
-    () => PredictionBloc(sl<PredictionRepository>()),
+    () => PredictionBloc(
+      sl<PredictionRepository>(),
+      sl<ModelInferenceRepository>(),
+    ),
   );
 }

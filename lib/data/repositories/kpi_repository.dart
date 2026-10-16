@@ -41,6 +41,8 @@ class KpiRepository {
         .snapshots()
         .map((snap) => snap.docs
             .map((doc) => KpiMetricModel.fromFirestore(doc, nodeId))
+            .toList()
+            .reversed
             .toList());
   }
 

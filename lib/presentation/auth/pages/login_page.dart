@@ -13,10 +13,16 @@ class LoginPage extends StatefulWidget {
 }
 
 void _sendPasswordReset() {
-  if (!_formKey.currentState!.validate()) return;
+  final email = _emailController.text.trim();
+  if (email.isEmpty || !email.contains('@')) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Enter a valid email address first.')),
+    );
+    return;
+  }
 
   context.read<AuthBloc>().add(
-        AuthPasswordResetRequested(_emailController.text.trim()),
+        AuthPasswordResetRequested(email),
       );
 }
 
