@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:netvision_ai/presentation/dashboard/bloc/kpi_bloc.dart';
 
 import 'firebase_options.dart';
 import 'di/service_locator.dart' as di;
@@ -23,8 +24,15 @@ class NetVisionApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider<AuthBloc>(
-      create: (_) => di.sl<AuthBloc>()..add(const AuthCheckRequested()),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider<AuthBloc>(
+          create: (_) => di.sl<AuthBloc>()..add(const AuthCheckRequested()),
+        ),
+        BlocProvider<KpiBloc>(
+          create: (_)=> di.sl<KpiBloc>(),
+        ),
+      ],
       child: MaterialApp(
         title: 'NetVision AI',
         debugShowCheckedModeBanner: false,

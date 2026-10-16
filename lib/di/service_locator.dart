@@ -5,6 +5,7 @@ import 'package:netvision_ai/data/repositories/kpi_repository.dart';
 import 'package:netvision_ai/data/repositories/node_repository.dart';
 import 'package:netvision_ai/presentation/dashboard/bloc/kpi_bloc.dart';
 
+
 import '../data/repositories/auth_repository.dart';
 import '../presentation/auth/bloc/auth_bloc.dart';
 
@@ -24,6 +25,7 @@ Future<void> init() async {
     ),
   );
 
+  
   sl.registerLazySingleton<NodeRepository>(
     ()=> NodeRepository(firestore: sl<FirebaseFirestore>())
   );

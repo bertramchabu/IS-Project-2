@@ -7,6 +7,7 @@ import '../../presentation/dashboard/pages/network_admin_home.dart';
 import '../../presentation/dashboard/pages/system_admin_home.dart';
 
 class AppRouter {
+
   static Widget route(AuthState state) {
     if (state is AuthAuthenticated) {
       return _homeForRole(state.user);
@@ -25,4 +26,6 @@ class AppRouter {
         return const SystemAdminHome();
     }
   }
+
+
 }
