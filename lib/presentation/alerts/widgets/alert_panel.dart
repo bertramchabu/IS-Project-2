@@ -10,7 +10,9 @@ import '../bloc/alert_event.dart';
 import '../bloc/alert_state.dart';
 
 class AlertPanel extends StatelessWidget {
-  const AlertPanel({super.key});
+  final double? width;
+
+  const AlertPanel({super.key, this.width = 340});
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +20,7 @@ class AlertPanel extends StatelessWidget {
     const borderColor = Color(0xFF1F2A3A);
 
     return Container(
-      width: 340,
+      width: width,
       decoration: const BoxDecoration(
         color: bgSurface,
         border: Border(left: BorderSide(color: borderColor)),
@@ -73,7 +75,8 @@ class AlertPanel extends StatelessWidget {
                       child: Text(
                         state.message,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
+                        style: const TextStyle(
+                            color: Color(0xFFEF4444), fontSize: 12),
                       ),
                     ),
                   );
@@ -199,22 +202,26 @@ class AlertPanel extends StatelessWidget {
                   PopupMenuItem(
                     value: null,
                     child: Text('All Alerts',
-                        style: TextStyle(color: Color(0xFFF1F5F9), fontSize: 13)),
+                        style:
+                            TextStyle(color: Color(0xFFF1F5F9), fontSize: 13)),
                   ),
                   PopupMenuItem(
                     value: AlertStatus.active,
                     child: Text('Active Only',
-                        style: TextStyle(color: Color(0xFFF1F5F9), fontSize: 13)),
+                        style:
+                            TextStyle(color: Color(0xFFF1F5F9), fontSize: 13)),
                   ),
                   PopupMenuItem(
                     value: AlertStatus.acknowledged,
                     child: Text('Acknowledged',
-                        style: TextStyle(color: Color(0xFFF1F5F9), fontSize: 13)),
+                        style:
+                            TextStyle(color: Color(0xFFF1F5F9), fontSize: 13)),
                   ),
                   PopupMenuItem(
                     value: AlertStatus.dismissed,
                     child: Text('Dismissed',
-                        style: TextStyle(color: Color(0xFFF1F5F9), fontSize: 13)),
+                        style:
+                            TextStyle(color: Color(0xFFF1F5F9), fontSize: 13)),
                   ),
                 ],
               ),
@@ -239,7 +246,8 @@ class AlertPanel extends StatelessWidget {
           ),
           title: const Row(
             children: [
-              Icon(Icons.remove_circle_outline, color: Color(0xFFF59E0B), size: 20),
+              Icon(Icons.remove_circle_outline,
+                  color: Color(0xFFF59E0B), size: 20),
               SizedBox(width: 8),
               Text(
                 'Dismiss Alert',
@@ -253,9 +261,11 @@ class AlertPanel extends StatelessWidget {
             style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 13),
             decoration: InputDecoration(
               labelText: 'Dismissal Reason',
-              labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+              labelStyle:
+                  const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
               hintText: 'e.g. Scheduled maintenance window',
-              hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+              hintStyle:
+                  const TextStyle(color: Color(0xFF64748B), fontSize: 12),
               filled: true,
               fillColor: const Color(0xFF1A2332),
               border: OutlineInputBorder(
@@ -267,7 +277,8 @@ class AlertPanel extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              style: TextButton.styleFrom(foregroundColor: const Color(0xFF94A3B8)),
+              style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF94A3B8)),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
@@ -389,7 +400,8 @@ class _AlertTile extends StatelessWidget {
                   label: const Text('Ack', style: TextStyle(fontSize: 11)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF22C55E),
-                    side: const BorderSide(color: Color(0xFF22C55E), width: 0.8),
+                    side:
+                        const BorderSide(color: Color(0xFF22C55E), width: 0.8),
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     minimumSize: const Size(0, 26),
                     visualDensity: VisualDensity.compact,
@@ -402,7 +414,8 @@ class _AlertTile extends StatelessWidget {
                   label: const Text('Dismiss', style: TextStyle(fontSize: 11)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF94A3B8),
-                    side: const BorderSide(color: Color(0xFF1F2A3A), width: 0.8),
+                    side:
+                        const BorderSide(color: Color(0xFF1F2A3A), width: 0.8),
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     minimumSize: const Size(0, 26),
                     visualDensity: VisualDensity.compact,

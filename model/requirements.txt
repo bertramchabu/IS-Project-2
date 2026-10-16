@@ -1,0 +1,5 @@
+firebase-functions>=0.4.2,<1.0.0
+joblib==1.4.2
+numpy==1.26.4
+scikit-learn==1.4.2
+tflite-runtime==2.14.0

@@ -34,7 +34,8 @@ class KpiLineChart extends StatelessWidget {
     final values = metrics.map((m) => m.value).toList();
     final minY = values.reduce((a, b) => a < b ? a : b);
     final maxY = values.reduce((a, b) => a > b ? a : b);
-    final padding = (maxY - minY) * 0.2;
+    final padding =
+        maxY == minY ? (maxY.abs() * 0.05).clamp(1, double.infinity) : (maxY - minY) * 0.2;
     final latest = metrics.last.value;
 
     return Card(
@@ -59,9 +60,29 @@ class KpiLineChart extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
-            Text(
-              '${metrics.length} samples • live',
-              style: const TextStyle(fontSize: 12, color: Colors.white54),
+            StreamBuilder<int>(
+              stream:
+                  Stream<int>.periodic(const Duration(seconds: 1), (tick) => tick),
+              initialData: 0,
+              builder: (context, _) {
+                final age = DateTime.now().difference(metrics.last.timestamp);
+                final isLive =
+                    age >= Duration.zero && age <= const Duration(seconds: 5);
+                final updateText = age < Duration.zero
+                    ? 'timestamp in future'
+                    : age.inSeconds < 60
+                        ? 'updated ${age.inSeconds}s ago'
+                        : 'updated ${age.inMinutes}m ago';
+                return Text(
+                  '${metrics.length} samples • ${isLive ? 'LIVE' : 'STALE'} • $updateText',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isLive ? Colors.greenAccent : Colors.white54,
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 12),
             Expanded(

@@ -12,20 +12,6 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-void _sendPasswordReset() {
-  final email = _emailController.text.trim();
-  if (email.isEmpty || !email.contains('@')) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Enter a valid email address first.')),
-    );
-    return;
-  }
-
-  context.read<AuthBloc>().add(
-        AuthPasswordResetRequested(email),
-      );
-}
-
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
@@ -49,6 +35,20 @@ class _LoginPageState extends State<LoginPage> {
             email: _emailController.text,
             password: _passwordController.text,
           ),
+        );
+  }
+
+  void _sendPasswordReset() {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid email address first.')),
+      );
+      return;
+    }
+
+    context.read<AuthBloc>().add(
+          AuthPasswordResetRequested(email),
         );
   }
 

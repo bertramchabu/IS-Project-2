@@ -74,7 +74,15 @@ class NetworkNodeModel {
     );
   }
 
-  bool get hasLocation => latitude != null && longitude != null;
+  bool get hasLocation =>
+      latitude != null &&
+      longitude != null &&
+      latitude!.isFinite &&
+      longitude!.isFinite &&
+      latitude! >= -90 &&
+      latitude! <= 90 &&
+      longitude! >= -180 &&
+      longitude! <= 180;
 
   String get statusLabel {
     switch (status) {

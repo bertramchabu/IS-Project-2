@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
 
 import '../../../data/models/user_models.dart';
 import '../../auth/bloc/auth_bloc.dart';
@@ -52,34 +51,81 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final user = authState is AuthAuthenticated ? authState.user : null;
+    final user = authenticatedUserFrom(authState);
     final username = user?.username ?? 'System Admin';
     final initials = username.isNotEmpty ? username[0].toUpperCase() : 'A';
 
     return Scaffold(
       backgroundColor: _AdminColors.bg,
       appBar: _buildAppBar(context, user, username, initials),
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Left Sidebar Navigation
-          _buildNavigationSidebar(),
-          const VerticalDivider(width: 1, color: _AdminColors.border),
-
-          // Main Tab Content
-          Expanded(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final content = Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(constraints.maxWidth < 600 ? 16 : 24),
               child: _buildSelectedTabContent(user),
             ),
-          ),
-        ],
+          );
+
+          if (constraints.maxWidth < 900) {
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: DropdownButtonFormField<int>(
+                    initialValue: _selectedTabIndex,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Administration section',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 0,
+                        child: Text('User Management'),
+                      ),
+                      DropdownMenuItem(value: 1, child: Text('Network Nodes')),
+                      DropdownMenuItem(
+                        value: 2,
+                        child: Text('Thresholds & Adaptive'),
+                      ),
+                      DropdownMenuItem(
+                        value: 3,
+                        child: Text('BiLSTM Model Management'),
+                      ),
+                      DropdownMenuItem(
+                        value: 4,
+                        child: Text('Audit Logs & Health'),
+                      ),
+                    ],
+                    onChanged: (index) {
+                      if (index != null) {
+                        setState(() => _selectedTabIndex = index);
+                      }
+                    },
+                  ),
+                ),
+                content,
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildNavigationSidebar(),
+              const VerticalDivider(width: 1, color: _AdminColors.border),
+              content,
+            ],
+          );
+        },
       ),
     );
   }
 
   PreferredSizeWidget _buildAppBar(
       BuildContext context, UserModel? user, String username, String initials) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return AppBar(
       elevation: 0,
       backgroundColor: _AdminColors.surface,
@@ -87,7 +133,7 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
       shape: const Border(
         bottom: BorderSide(color: _AdminColors.border, width: 1),
       ),
-      titleSpacing: 24,
+      titleSpacing: compact ? 12 : 24,
       title: Row(
         children: [
           Container(
@@ -102,11 +148,11 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                 color: Colors.white, size: 20),
           ),
           const SizedBox(width: 12),
-          const Column(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
+              const Text(
                 'NetVision AI',
                 style: TextStyle(
                   fontSize: 17,
@@ -115,7 +161,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                   color: _AdminColors.textPrimary,
                 ),
               ),
-              Text(
+              if (!compact)
+                const Text(
                 'System Administration & Governance',
                 style: TextStyle(
                   fontSize: 10,
@@ -130,7 +177,7 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
       ),
       actions: [
         // Role pill
-        Container(
+        if (!compact) Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: _AdminColors.violet.withOpacity(0.12),
@@ -155,12 +202,11 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
             ],
           ),
         ),
-        const SizedBox(width: 12),
+        if (!compact) const SizedBox(width: 12),
         // Clickable User Profile
         InkWell(
-          onTap: user == null
-              ? null
-              : () => UserProfileDialog.show(context, user),
+          onTap:
+              user == null ? null : () => UserProfileDialog.show(context, user),
           borderRadius: BorderRadius.circular(20),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -184,18 +230,20 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  username,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: _AdminColors.textPrimary,
+                if (!compact) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    username,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _AdminColors.textPrimary,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(Icons.keyboard_arrow_down_rounded,
-                    size: 16, color: _AdminColors.textMuted),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.keyboard_arrow_down_rounded,
+                      size: 16, color: _AdminColors.textMuted),
+                ],
               ],
             ),
           ),
@@ -219,7 +267,10 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
       {'title': 'Network Nodes', 'icon': Icons.hub_outlined},
       {'title': 'Thresholds & Adaptive', 'icon': Icons.tune_rounded},
       {'title': 'BiLSTM Model Management', 'icon': Icons.psychology_outlined},
-      {'title': 'Audit Logs & Health', 'icon': Icons.history_toggle_off_rounded},
+      {
+        'title': 'Audit Logs & Health',
+        'icon': Icons.history_toggle_off_rounded
+      },
     ];
 
     return Container(
@@ -337,7 +388,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
           stream: _firestore.collection('users').snapshots(),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
-              return Center(child: Text('Error loading users: ${snapshot.error}'));
+              return Center(
+                  child: Text('Error loading users: ${snapshot.error}'));
             }
             if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
@@ -352,7 +404,9 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
-                child: DataTable(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
                   headingRowColor:
                       WidgetStateProperty.all(_AdminColors.surfaceAlt),
                   columns: const [
@@ -397,7 +451,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                     final data = doc.data() as Map<String, dynamic>;
                     final username = data['username'] as String? ?? 'User';
                     final email = data['email'] as String? ?? '';
-                    final roleId = data['roleId'] as String? ?? 'role_network_admin';
+                    final roleId =
+                        data['roleId'] as String? ?? 'role_network_admin';
                     final isActive = data['isActive'] as bool? ?? true;
                     final mfa = data['mfaEnabled'] as bool? ?? false;
 
@@ -422,7 +477,9 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                                 radius: 12,
                                 backgroundColor: roleColor.withOpacity(0.2),
                                 child: Text(
-                                  username.isNotEmpty ? username[0].toUpperCase() : 'U',
+                                  username.isNotEmpty
+                                      ? username[0].toUpperCase()
+                                      : 'U',
                                   style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
@@ -449,7 +506,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                             decoration: BoxDecoration(
                               color: roleColor.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: roleColor.withOpacity(0.4)),
+                              border:
+                                  Border.all(color: roleColor.withOpacity(0.4)),
                             ),
                             child: Text(roleLabel,
                                 style: TextStyle(
@@ -463,7 +521,9 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: (isActive ? _AdminColors.healthy : _AdminColors.critical)
+                              color: (isActive
+                                      ? _AdminColors.healthy
+                                      : _AdminColors.critical)
                                   .withOpacity(0.1),
                               borderRadius: BorderRadius.circular(4),
                             ),
@@ -516,8 +576,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                                 icon: const Icon(Icons.edit_outlined,
                                     size: 16, color: _AdminColors.accent),
                                 tooltip: 'Edit Role',
-                                onPressed: () =>
-                                    _showEditRoleDialog(doc.id, username, roleId),
+                                onPressed: () => _showEditRoleDialog(
+                                    doc.id, username, roleId),
                               ),
                             ],
                           ),
@@ -525,6 +585,7 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                       ],
                     );
                   }).toList(),
+                  ),
                 ),
               ),
             );
@@ -553,7 +614,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                 side: const BorderSide(color: _AdminColors.border),
               ),
               title: const Text('Add System User',
-                  style: TextStyle(color: _AdminColors.textPrimary, fontSize: 16)),
+                  style:
+                      TextStyle(color: _AdminColors.textPrimary, fontSize: 16)),
               content: SizedBox(
                 width: 380,
                 child: Column(
@@ -697,8 +759,7 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                       value: 'role_network_admin',
                       child: Text('Network Administrator')),
                   DropdownMenuItem(
-                      value: 'role_ict_manager',
-                      child: Text('ICT Manager')),
+                      value: 'role_ict_manager', child: Text('ICT Manager')),
                   DropdownMenuItem(
                       value: 'role_system_admin',
                       child: Text('System Administrator')),
@@ -785,7 +846,9 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
-                child: DataTable(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
                   headingRowColor:
                       WidgetStateProperty.all(_AdminColors.surfaceAlt),
                   columns: const [
@@ -876,6 +939,7 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                       ],
                     );
                   }).toList(),
+                  ),
                 ),
               ),
             );
@@ -911,7 +975,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
               children: [
                 TextField(
                   controller: nameCtrl,
-                  style: const TextStyle(color: _AdminColors.textPrimary, fontSize: 13),
+                  style: const TextStyle(
+                      color: _AdminColors.textPrimary, fontSize: 13),
                   decoration: const InputDecoration(
                     labelText: 'Node Name (e.g. Eldoret Core Gateway)',
                     filled: true,
@@ -922,7 +987,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: ipCtrl,
-                  style: const TextStyle(color: _AdminColors.textPrimary, fontSize: 13),
+                  style: const TextStyle(
+                      color: _AdminColors.textPrimary, fontSize: 13),
                   decoration: const InputDecoration(
                     labelText: 'IP Address (e.g. 192.168.10.1)',
                     filled: true,
@@ -936,7 +1002,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                     Expanded(
                       child: TextField(
                         controller: latCtrl,
-                        style: const TextStyle(color: _AdminColors.textPrimary, fontSize: 13),
+                        style: const TextStyle(
+                            color: _AdminColors.textPrimary, fontSize: 13),
                         decoration: const InputDecoration(
                           labelText: 'Latitude',
                           filled: true,
@@ -949,7 +1016,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                     Expanded(
                       child: TextField(
                         controller: lngCtrl,
-                        style: const TextStyle(color: _AdminColors.textPrimary, fontSize: 13),
+                        style: const TextStyle(
+                            color: _AdminColors.textPrimary, fontSize: 13),
                         decoration: const InputDecoration(
                           labelText: 'Longitude',
                           filled: true,
@@ -964,7 +1032,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                 DropdownButtonFormField<String>(
                   value: selectedType,
                   dropdownColor: _AdminColors.surfaceAlt,
-                  style: const TextStyle(color: _AdminColors.textPrimary, fontSize: 13),
+                  style: const TextStyle(
+                      color: _AdminColors.textPrimary, fontSize: 13),
                   decoration: const InputDecoration(
                     labelText: 'Node Type',
                     filled: true,
@@ -972,9 +1041,13 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                     border: OutlineInputBorder(),
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'Gateway Router', child: Text('Gateway Router')),
-                    DropdownMenuItem(value: 'Core Switch', child: Text('Core Switch')),
-                    DropdownMenuItem(value: 'Edge Access Point', child: Text('Edge Access Point')),
+                    DropdownMenuItem(
+                        value: 'Gateway Router', child: Text('Gateway Router')),
+                    DropdownMenuItem(
+                        value: 'Core Switch', child: Text('Core Switch')),
+                    DropdownMenuItem(
+                        value: 'Edge Access Point',
+                        child: Text('Edge Access Point')),
                   ],
                   onChanged: (val) {
                     if (val != null) selectedType = val;
@@ -986,11 +1059,13 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel', style: TextStyle(color: _AdminColors.textMuted)),
+              child: const Text('Cancel',
+                  style: TextStyle(color: _AdminColors.textMuted)),
             ),
             ElevatedButton(
               onPressed: () async {
-                if (nameCtrl.text.trim().isEmpty || ipCtrl.text.trim().isEmpty) return;
+                if (nameCtrl.text.trim().isEmpty || ipCtrl.text.trim().isEmpty)
+                  return;
                 await _firestore.collection('networkNodes').add({
                   'nodeName': nameCtrl.text.trim(),
                   'ipAddress': ipCtrl.text.trim(),
@@ -1025,7 +1100,6 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
           'Configure global prediction thresholds and dynamic computational load optimization',
         ),
         const SizedBox(height: 20),
-
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
@@ -1052,7 +1126,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                       ),
                       Text(
                         'Generates visual and audio alerts when BiLSTM model exceeds this score',
-                        style: TextStyle(fontSize: 11.5, color: _AdminColors.textMuted),
+                        style: TextStyle(
+                            fontSize: 11.5, color: _AdminColors.textMuted),
                       ),
                     ],
                   ),
@@ -1062,7 +1137,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                     decoration: BoxDecoration(
                       color: _AdminColors.accent.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: _AdminColors.accent.withOpacity(0.3)),
+                      border: Border.all(
+                          color: _AdminColors.accent.withOpacity(0.3)),
                     ),
                     child: Text(
                       '${(_globalThreshold * 100).toStringAsFixed(0)}%',
@@ -1101,7 +1177,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                       ),
                       Text(
                         'Reduces prediction rate by 90% during nominal conditions to prevent computational waste',
-                        style: TextStyle(fontSize: 11.5, color: _AdminColors.textMuted),
+                        style: TextStyle(
+                            fontSize: 11.5, color: _AdminColors.textMuted),
                       ),
                     ],
                   ),
@@ -1125,7 +1202,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                         children: [
                           const Text('Reduction Trigger (Fault Prob < X)',
                               style: TextStyle(
-                                  fontSize: 11.5, color: _AdminColors.textMuted)),
+                                  fontSize: 11.5,
+                                  color: _AdminColors.textMuted)),
                           const SizedBox(height: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -1152,7 +1230,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                         children: [
                           const Text('Compute Reduction Rate',
                               style: TextStyle(
-                                  fontSize: 11.5, color: _AdminColors.textMuted)),
+                                  fontSize: 11.5,
+                                  color: _AdminColors.textMuted)),
                           const SizedBox(height: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -1201,7 +1280,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('System configuration saved successfully'),
+                                content: Text(
+                                    'System configuration saved successfully'),
                                 backgroundColor: _AdminColors.healthy,
                               ),
                             );
@@ -1240,7 +1320,6 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
           'Inspect neural architecture, holdout validation scores, and trigger model retraining',
         ),
         const SizedBox(height: 20),
-
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1276,15 +1355,19 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                     const SizedBox(height: 16),
                     _specRow('Active Model Version', 'netvision_bilstm_v1.2.0'),
                     const Divider(height: 14, color: _AdminColors.border),
-                    _specRow('Input Sequence Dimensions', '30 Timesteps x 5 Multivariate KPIs'),
+                    _specRow('Input Sequence Dimensions',
+                        '30 Timesteps x 5 Multivariate KPIs'),
                     const Divider(height: 14, color: _AdminColors.border),
-                    _specRow('Hidden Layers', '2x Bidirectional LSTM (64 Units each)'),
+                    _specRow('Hidden Layers',
+                        '2x Bidirectional LSTM (64 Units each)'),
                     const Divider(height: 14, color: _AdminColors.border),
                     _specRow('Regularization', 'Dropout Rate = 0.20'),
                     const Divider(height: 14, color: _AdminColors.border),
-                    _specRow('Output Layer', 'Dense Sigmoid (Fault Probability [0, 1])'),
+                    _specRow('Output Layer',
+                        'Dense Sigmoid (Fault Probability [0, 1])'),
                     const Divider(height: 14, color: _AdminColors.border),
-                    _specRow('F1-Score / RMSE', '0.872 / 0.078 (Holds Objective II)'),
+                    _specRow('F1-Score / RMSE',
+                        '0.872 / 0.078 (Holds Objective II)'),
                   ],
                 ),
               ),
@@ -1324,10 +1407,11 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                     Text(
                       'Retrain BiLSTM with newly aggregated time-series telemetry to maintain predictive precision and reduce false alarms.',
                       style: TextStyle(
-                          fontSize: 12, color: _AdminColors.textSecondary, height: 1.5),
+                          fontSize: 12,
+                          color: _AdminColors.textSecondary,
+                          height: 1.5),
                     ),
                     const SizedBox(height: 16),
-
                     if (_isRetraining) ...[
                       LinearProgressIndicator(
                         value: _trainingProgress,
@@ -1344,7 +1428,6 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                       ),
                       const SizedBox(height: 16),
                     ],
-
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -1412,7 +1495,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 12, color: _AdminColors.textMuted)),
+            style:
+                const TextStyle(fontSize: 12, color: _AdminColors.textMuted)),
         Text(value,
             style: const TextStyle(
                 fontSize: 12,
@@ -1437,23 +1521,23 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
         Row(
           children: [
             Expanded(
-              child: _healthCard(
-                  'Firebase Auth', 'Connected', Icons.vpn_key_rounded, _AdminColors.healthy),
+              child: _healthCard('Firebase Auth', 'Connected',
+                  Icons.vpn_key_rounded, _AdminColors.healthy),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _healthCard(
-                  'Cloud Firestore', 'Synced (0ms)', Icons.storage_rounded, _AdminColors.healthy),
+              child: _healthCard('Cloud Firestore', 'Synced (0ms)',
+                  Icons.storage_rounded, _AdminColors.healthy),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _healthCard(
-                  'BiLSTM Engine', 'Online (1.4s)', Icons.memory_rounded, _AdminColors.accent),
+              child: _healthCard('BiLSTM Engine', 'Online (1.4s)',
+                  Icons.memory_rounded, _AdminColors.accent),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _healthCard(
-                  'MQTT Stream', 'Active (1s tick)', Icons.sensors_rounded, _AdminColors.healthy),
+              child: _healthCard('MQTT Stream', 'Active (1s tick)',
+                  Icons.sensors_rounded, _AdminColors.healthy),
             ),
           ],
         ),
@@ -1487,13 +1571,23 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                 ],
               ),
               const SizedBox(height: 14),
-              _auditLogRow('10:14:22', 'admin@netvision.local', 'THRESHOLD_UPDATE', 'Updated global alert threshold to 70%'),
+              _auditLogRow('10:14:22', 'admin@netvision.local',
+                  'THRESHOLD_UPDATE', 'Updated global alert threshold to 70%'),
               const Divider(height: 12, color: _AdminColors.border),
-              _auditLogRow('09:48:05', 'jdoe@netvision.local', 'ALERT_ACKNOWLEDGE', 'Acknowledged critical latency spike on Mombasa-01'),
+              _auditLogRow(
+                  '09:48:05',
+                  'jdoe@netvision.local',
+                  'ALERT_ACKNOWLEDGE',
+                  'Acknowledged critical latency spike on Mombasa-01'),
               const Divider(height: 12, color: _AdminColors.border),
-              _auditLogRow('09:22:18', 'msmith@netvision.local', 'REPORT_EXPORT', 'Exported monthly executive reliability PDF'),
+              _auditLogRow(
+                  '09:22:18',
+                  'msmith@netvision.local',
+                  'REPORT_EXPORT',
+                  'Exported monthly executive reliability PDF'),
               const Divider(height: 12, color: _AdminColors.border),
-              _auditLogRow('08:00:10', 'system', 'MODEL_INITIALIZE', 'BiLSTM inference runtime v1.2.0 loaded into memory'),
+              _auditLogRow('08:00:10', 'system', 'MODEL_INITIALIZE',
+                  'BiLSTM inference runtime v1.2.0 loaded into memory'),
             ],
           ),
         ),
@@ -1501,7 +1595,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
     );
   }
 
-  Widget _healthCard(String service, String status, IconData icon, Color color) {
+  Widget _healthCard(
+      String service, String status, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

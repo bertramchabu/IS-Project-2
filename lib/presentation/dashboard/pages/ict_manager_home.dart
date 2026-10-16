@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../../data/models/user_models.dart';
+import '../../../data/repositories/model_inference_repository.dart';
+import '../../../di/service_locator.dart' as di;
 import '../../auth/bloc/auth_bloc.dart';
 import '../../auth/bloc/auth_event.dart';
 import '../../auth/bloc/auth_state.dart';
@@ -40,6 +43,9 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
   String _selectedDateRange = 'Last 30 Days';
   bool _includeChartsInReport = true;
   bool _isExporting = false;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late final ModelInferenceRepository _modelRepository;
+  late Future<ModelApiStatus> _modelStatusFuture;
 
   final List<String> _reportTypes = [
     'Executive Reliability Summary',
@@ -55,9 +61,43 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
     'Quarter-to-Date (Q3)',
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _modelRepository = di.sl<ModelInferenceRepository>();
+    _modelStatusFuture = _loadModelStatus();
+  }
+
+  void _refreshModelStatus() {
+    setState(() => _modelStatusFuture = _loadModelStatus());
+  }
+
+  Future<ModelApiStatus> _loadModelStatus() async {
+    try {
+      return await _modelRepository.checkStatus();
+    } catch (error) {
+      print('[ICTManagerHome] Model API status check failed: $error');
+      rethrow;
+    }
+  }
+
   Future<void> _exportPdfReport(UserModel? user) async {
     setState(() => _isExporting = true);
     try {
+      final nodesSnapshot =
+          await _firestore.collection('networkNodes').get();
+      final activeNodeCount = nodesSnapshot.docs
+          .where((doc) => doc.data()['isActive'] as bool? ?? true)
+          .length;
+      ModelApiStatus? modelStatus;
+      try {
+        modelStatus = await _modelRepository.checkStatus();
+      } catch (error) {
+        print('[ICTManagerHome] Could not include model status in report: $error');
+      }
+      final modelReady =
+          modelStatus?.isOnline == true && modelStatus?.isModelLoaded == true;
+
       final doc = pw.Document();
       final nowStr = DateFormat('MMMM d, yyyy • HH:mm').format(DateTime.now());
 
@@ -120,19 +160,18 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
               ),
               pw.SizedBox(height: 6),
               pw.Text(
-                'During the evaluation period of $_selectedDateRange, the NetVision AI '
-                'BiLSTM Predictive Monitoring System maintained continuous proactive anticipation '
-                'across all enterprise infrastructure nodes. Network uptime attained 99.85%, meeting '
-                'and exceeding the Tier-3 enterprise SLA requirement (99.5%). 28 potential high-severity '
-                'fault precursors were anticipated by the model with an average detection lead time of '
-                '1.4 seconds, allowing automated early-warning alerts before customer service degradation.',
+                'This report summarizes current monitored infrastructure. '
+                '$activeNodeCount active nodes are registered. '
+                'The selected range ($_selectedDateRange) is not applied to historical data. '
+                'Uptime, MTBF, prevention totals, and user-reported usability are not '
+                'calculated from the current Firestore telemetry and are not represented as measured results.',
                 style: const pw.TextStyle(fontSize: 10),
               ),
               pw.SizedBox(height: 14),
 
-              // KPI Table
+              // Infrastructure metrics table
               pw.Text(
-                '2. Core Infrastructure & SLA Performance',
+                '2. Infrastructure Summary',
                 style:
                     pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
               ),
@@ -148,18 +187,27 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                   [
                     'Network Uptime / Availability',
                     '>= 99.50%',
-                    '99.85%',
-                    'EXCEEDED'
+                    'Not measured',
+                    'Unavailable'
                   ],
                   [
                     'Mean Time Between Failures (MTBF)',
                     '>= 120 hrs',
-                    '142.6 hrs',
-                    'EXCEEDED'
+                    'Not measured',
+                    'Unavailable'
                   ],
-                  ['Average Core Latency', '<= 60 ms', '38.4 ms', 'OPTIMAL'],
-                  ['Average Packet Jitter', '<= 25 ms', '9.2 ms', 'OPTIMAL'],
-                  ['Overall Packet Loss', '<= 1.0%', '0.18%', 'OPTIMAL'],
+                  [
+                    'Active network nodes',
+                    'Live inventory',
+                    '$activeNodeCount',
+                    'Firestore count'
+                  ],
+                  [
+                    'Average latency / jitter / packet loss',
+                    'Live KPI telemetry',
+                    'Not aggregated',
+                    'Unavailable'
+                  ],
                 ],
                 headerStyle:
                     pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
@@ -170,9 +218,9 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
               ),
               pw.SizedBox(height: 14),
 
-              // Model Predictive Performance
+              // Model performance table
               pw.Text(
-                '3. BiLSTM Machine Learning Model Effectiveness (v1.2.0)',
+                '3. BiLSTM Model Status and Evaluation',
                 style:
                     pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
               ),
@@ -186,40 +234,36 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                 ],
                 data: [
                   [
-                    'Model Architecture',
-                    'Lightweight BiLSTM',
-                    '2x 64 Units (Dropout 0.2)',
-                    'Holdout Validated'
+                    'Inference API / model artifacts',
+                    'API online and model loaded',
+                    modelReady ? 'Ready' : 'Unavailable',
+                    modelReady ? 'Connected' : 'Check API'
                   ],
                   [
                     'Fault Prediction F1-Score',
                     '>= 0.85',
-                    '0.872',
-                    'Objective II Achieved'
+                    modelStatus?.f1Score?.toStringAsFixed(4) ?? 'Not reported',
+                    modelStatus?.f1Score == null
+                        ? 'Not reported'
+                        : modelStatus!.f1Score! >= 0.85
+                            ? 'Target met'
+                            : 'Below target'
                   ],
                   [
                     'Root Mean Squared Error (RMSE)',
                     '<= 0.10',
-                    '0.078',
-                    'Objective II Achieved'
+                    modelStatus?.rmse?.toStringAsFixed(4) ?? 'Not reported',
+                    modelStatus?.rmse == null
+                        ? 'Not reported'
+                        : modelStatus!.rmse! <= 0.10
+                            ? 'Target met'
+                            : 'Above target'
                   ],
                   [
-                    'Detection / Notification Time',
-                    '<= 2.0 seconds',
-                    '1.42 seconds',
-                    'Objective III Achieved'
-                  ],
-                  [
-                    'Adaptive Reduction Efficiency',
-                    '90% under normal',
-                    '91.4% reduction',
-                    'Objective III Achieved'
-                  ],
-                  [
-                    'False Positive Rate',
-                    '<= 10.0%',
-                    '4.8%',
-                    'Alert Fatigue Reduced'
+                    'Adaptive inference reduction',
+                    '90% below 30% risk',
+                    modelReady ? 'Configured' : 'Not verified',
+                    modelReady ? 'Available' : 'Unavailable'
                   ],
                 ],
                 headerStyle:
@@ -299,7 +343,7 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final user = authState is AuthAuthenticated ? authState.user : null;
+    final user = authenticatedUserFrom(authState);
     final username = user?.username ?? 'ICT Manager';
     final initials = username.isNotEmpty ? username[0].toUpperCase() : 'M';
 
@@ -323,21 +367,26 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
             const SizedBox(height: 24),
 
             // Middle Row: AI Model Performance & Alert Volume Trends
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // AI Model Performance Card (Flex 5)
-                Expanded(
-                  flex: 5,
-                  child: _buildModelPerformanceCard(),
-                ),
-                const SizedBox(width: 18),
-                // Alert Trends & Distribution Card (Flex 6)
-                Expanded(
-                  flex: 6,
-                  child: _buildAlertTrendsCard(),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 900) {
+                  return Column(
+                    children: [
+                      _buildModelPerformanceCard(),
+                      const SizedBox(height: 18),
+                      _buildAlertTrendsCard(),
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 5, child: _buildModelPerformanceCard()),
+                    const SizedBox(width: 18),
+                    Expanded(flex: 6, child: _buildAlertTrendsCard()),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 24),
 
@@ -351,6 +400,7 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
 
   PreferredSizeWidget _buildAppBar(
       BuildContext context, UserModel? user, String username, String initials) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return AppBar(
       elevation: 0,
       backgroundColor: _ICTColors.surface,
@@ -358,7 +408,7 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
       shape: const Border(
         bottom: BorderSide(color: _ICTColors.border, width: 1),
       ),
-      titleSpacing: 24,
+      titleSpacing: compact ? 12 : 24,
       title: Row(
         children: [
           Container(
@@ -373,11 +423,11 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                 color: Colors.white, size: 20),
           ),
           const SizedBox(width: 12),
-          const Column(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
+              const Text(
                 'NetVision AI',
                 style: TextStyle(
                   fontSize: 17,
@@ -386,7 +436,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                   color: _ICTColors.textPrimary,
                 ),
               ),
-              Text(
+              if (!compact)
+                const Text(
                 'ICT Management & Executive Intelligence',
                 style: TextStyle(
                   fontSize: 10,
@@ -401,7 +452,7 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
       ),
       actions: [
         // Role pill
-        Container(
+        if (!compact) Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: _ICTColors.purple.withOpacity(0.12),
@@ -425,7 +476,7 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
             ],
           ),
         ),
-        const SizedBox(width: 12),
+        if (!compact) const SizedBox(width: 12),
         // User Profile Clickable Chip
         InkWell(
           onTap:
@@ -453,18 +504,20 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  username,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: _ICTColors.textPrimary,
+                if (!compact) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    username,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _ICTColors.textPrimary,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(Icons.keyboard_arrow_down_rounded,
-                    size: 16, color: _ICTColors.textMuted),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.keyboard_arrow_down_rounded,
+                      size: 16, color: _ICTColors.textMuted),
+                ],
               ],
             ),
           ),
@@ -525,51 +578,105 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
   }
 
   Widget _buildMetricsGrid() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cardWidth = (constraints.maxWidth - (3 * 16)) / 4;
-        return Row(
-          children: [
-            _buildStatCard(
-              title: 'NETWORK UPTIME',
-              value: '99.85%',
-              subtitle: 'SLA target: 99.50%',
-              icon: Icons.cloud_done_rounded,
-              color: _ICTColors.healthy,
-              width: cardWidth,
-            ),
-            const SizedBox(width: 16),
-            _buildStatCard(
-              title: 'MTBF (RELIABILITY)',
-              value: '142.6 hrs',
-              subtitle: '+18% vs reactive baseline',
-              icon: Icons.timer_outlined,
-              color: _ICTColors.accent,
-              width: cardWidth,
-            ),
-            const SizedBox(width: 16),
-            _buildStatCard(
-              title: 'FAULTS PREVENTED',
-              value: '28 Incidents',
-              subtitle: 'Detected prior to downtime',
-              icon: Icons.auto_graph_rounded,
-              color: _ICTColors.purple,
-              width: cardWidth,
-            ),
-            const SizedBox(width: 16),
-            _buildStatCard(
-              title: 'AVG CORE LATENCY',
-              value: '38.4 ms',
-              subtitle: 'Nominal threshold < 80ms',
-              icon: Icons.speed_rounded,
-              color: const Color(0xFF38BDF8),
-              width: cardWidth,
-            ),
-          ],
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _firestore.collection('networkNodes').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          print('[ICTManagerHome] Node summary stream error: ${snapshot.error}');
+          return _dashboardDataError('Unable to load network node status.');
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final activeNodes = snapshot.data!.docs.where(
+          (doc) => (doc.data()['isActive'] as bool? ?? true),
+        );
+        var healthy = 0;
+        var warning = 0;
+        var critical = 0;
+        for (final node in activeNodes) {
+          switch ((node.data()['status'] as String? ?? '').toLowerCase()) {
+            case 'healthy':
+              healthy++;
+            case 'warning':
+              warning++;
+            case 'critical':
+              critical++;
+          }
+        }
+
+        final cards = [
+          (
+            title: 'ACTIVE NODES',
+            value: '${activeNodes.length}',
+            subtitle: 'Registered and enabled',
+            icon: Icons.hub_rounded,
+            color: _ICTColors.accent,
+          ),
+          (
+            title: 'HEALTHY',
+            value: '$healthy',
+            subtitle: 'Current node status',
+            icon: Icons.check_circle_outline_rounded,
+            color: _ICTColors.healthy,
+          ),
+          (
+            title: 'WARNING',
+            value: '$warning',
+            subtitle: 'Require attention',
+            icon: Icons.warning_amber_rounded,
+            color: _ICTColors.warning,
+          ),
+          (
+            title: 'CRITICAL',
+            value: '$critical',
+            subtitle: 'Current critical state',
+            icon: Icons.error_outline_rounded,
+            color: _ICTColors.critical,
+          ),
+        ];
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 1100
+                ? 4
+                : constraints.maxWidth >= 560
+                    ? 2
+                    : 1;
+            final width =
+                (constraints.maxWidth - 16 * (columns - 1)) / columns;
+            return Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                for (final card in cards)
+                  _buildStatCard(
+                    title: card.title,
+                    value: card.value,
+                    subtitle: card.subtitle,
+                    icon: card.icon,
+                    color: card.color,
+                    width: width,
+                  ),
+              ],
+            );
+          },
         );
       },
     );
   }
+
+  Widget _dashboardDataError(String message) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _ICTColors.critical.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _ICTColors.critical.withOpacity(0.3)),
+        ),
+        child: Text(message, style: const TextStyle(color: _ICTColors.critical)),
+      );
 
   Widget _buildStatCard({
     required String title,
@@ -600,13 +707,17 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.1,
-                  color: _ICTColors.textMuted,
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
+                    color: _ICTColors.textMuted,
+                  ),
                 ),
               ),
               Container(
@@ -657,58 +768,101 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
-                children: [
-                  Icon(Icons.psychology_rounded,
-                      color: _ICTColors.accent, size: 18),
-                  SizedBox(width: 8),
-                  Text(
-                    'BiLSTM PREDICTIVE ENGINE EVALUATION',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                      color: _ICTColors.textSecondary,
+              const Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.psychology_rounded,
+                        color: _ICTColors.accent, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'BiLSTM PREDICTIVE ENGINE',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                          color: _ICTColors.textSecondary,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _ICTColors.healthy.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(6),
-                  border:
-                      Border.all(color: _ICTColors.healthy.withOpacity(0.3)),
-                ),
-                child: const Text(
-                  'MODEL v1.2.0 • ACTIVE',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: _ICTColors.healthy,
-                  ),
-                ),
+              IconButton(
+                tooltip: 'Refresh model status',
+                onPressed: _refreshModelStatus,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                color: _ICTColors.textSecondary,
+                visualDensity: VisualDensity.compact,
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 8),
+          FutureBuilder<ModelApiStatus>(
+            future: _modelStatusFuture,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return _dashboardDataError(
+                  'Model API unavailable. Start the inference service to view model metrics.',
+                );
+              }
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
 
-          // Objective Validation Metrics Table
-          _buildEvaluationRow(
-              'F1-Score (Holdout Test)', '0.872', 'Target >= 0.85', true),
-          const Divider(height: 16, color: _ICTColors.border),
-          _buildEvaluationRow(
-              'Root Mean Square Error (RMSE)', '0.078', 'Target <= 0.10', true),
-          const Divider(height: 16, color: _ICTColors.border),
-          _buildEvaluationRow('Average Anticipation Latency', '1.42 sec',
-              'Target <= 2.0 sec', true),
-          const Divider(height: 16, color: _ICTColors.border),
-          _buildEvaluationRow(
-              'Adaptive Compute Reduction', '91.4%', 'Target >= 90%', true),
-          const Divider(height: 16, color: _ICTColors.border),
-          _buildEvaluationRow(
-              'False Positive Alarm Rate', '4.8%', 'Target < 10%', true),
+              final status = snapshot.data!;
+              final ready = status.isOnline && status.isModelLoaded;
+              final f1 = status.f1Score;
+              final rmse = status.rmse;
+              return Column(
+                children: [
+                  _buildEvaluationRow(
+                    'Model API status',
+                    ready
+                        ? 'READY'
+                        : status.isOnline
+                            ? 'MODEL NOT LOADED'
+                            : 'OFFLINE',
+                    status.message,
+                    ready,
+                  ),
+                  const Divider(height: 16, color: _ICTColors.border),
+                  _buildEvaluationRow(
+                    'F1-score (held-out evaluation)',
+                    f1?.toStringAsFixed(4) ?? 'Not available',
+                    'Proposal target >= 0.85',
+                    f1 != null && f1 >= 0.85,
+                  ),
+                  const Divider(height: 16, color: _ICTColors.border),
+                  _buildEvaluationRow(
+                    'RMSE (held-out evaluation)',
+                    rmse?.toStringAsFixed(4) ?? 'Not available',
+                    'Proposal target <= 0.10',
+                    rmse != null && rmse <= 0.10,
+                  ),
+                  const Divider(height: 16, color: _ICTColors.border),
+                  _buildEvaluationRow(
+                    'Model version',
+                    status.modelVersion,
+                    'Read from model metadata',
+                    ready,
+                  ),
+                  const Divider(height: 16, color: _ICTColors.border),
+                  _buildEvaluationRow(
+                    'Adaptive compute reduction',
+                    ready ? '90% configured' : 'Not available',
+                    'When fault probability < 30%',
+                    ready,
+                  ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
@@ -805,85 +959,143 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
           ),
           const SizedBox(height: 18),
 
-          // Bar Chart
-          SizedBox(
-            height: 170,
-            child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: 20,
-                barTouchData: BarTouchData(enabled: true),
-                titlesData: FlTitlesData(
-                  show: true,
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (val, meta) {
-                        const days = [
-                          'Mon',
-                          'Tue',
-                          'Wed',
-                          'Thu',
-                          'Fri',
-                          'Sat',
-                          'Sun'
-                        ];
-                        final idx = val.toInt();
-                        if (idx >= 0 && idx < days.length) {
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              days[idx],
-                              style: const TextStyle(
-                                  color: _ICTColors.textMuted, fontSize: 10),
-                            ),
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      },
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _firestore
+                .collectionGroup('alerts')
+                .orderBy('createdAt', descending: true)
+                .limit(500)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                print('[ICTManagerHome] Alert trend stream error: ${snapshot.error}');
+                return _dashboardDataError('Unable to load alert trends.');
+              }
+              if (!snapshot.hasData) {
+                return const SizedBox(
+                  height: 170,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              final now = DateTime.now();
+              final weekStart = DateTime(now.year, now.month, now.day)
+                  .subtract(Duration(days: now.weekday - 1));
+              final counts = List.generate(7, (_) => List<double>.filled(4, 0));
+              for (final doc in snapshot.data!.docs) {
+                final data = doc.data();
+                final created = (data['createdAt'] as Timestamp?)?.toDate();
+                if (created == null ||
+                    created.isBefore(weekStart) ||
+                    !created.isBefore(weekStart.add(const Duration(days: 7)))) {
+                  continue;
+                }
+                final severity = (data['severityId'] as String? ?? '')
+                    .toLowerCase();
+                final severityIndex = switch (severity) {
+                  'critical' => 0,
+                  'high' => 1,
+                  'medium' => 2,
+                  'low' => 3,
+                  _ => -1,
+                };
+                if (severityIndex >= 0) {
+                  counts[created.weekday - 1][severityIndex]++;
+                }
+              }
+
+              final groups = [
+                for (var day = 0; day < counts.length; day++)
+                  _barGroup(
+                    day,
+                    counts[day][0],
+                    counts[day][1],
+                    counts[day][2],
+                    counts[day][3],
+                  ),
+              ];
+              final maxCount = counts
+                  .map((day) => day.fold<double>(0, (sum, value) => sum + value))
+                  .reduce((a, b) => a > b ? a : b);
+              if (maxCount == 0) {
+                return const SizedBox(
+                  height: 170,
+                  child: Center(
+                    child: Text(
+                      'No alerts recorded this week.',
+                      style: TextStyle(color: _ICTColors.textMuted),
                     ),
                   ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 26,
-                      getTitlesWidget: (val, meta) {
-                        if (val % 5 == 0) {
-                          return Text(
-                            '${val.toInt()}',
+                );
+              }
+
+              return SizedBox(
+                height: 170,
+                child: BarChart(
+                  BarChartData(
+                    alignment: BarChartAlignment.spaceAround,
+                    maxY: maxCount < 5 ? 5 : maxCount * 1.2,
+                    barTouchData: BarTouchData(enabled: true),
+                    titlesData: FlTitlesData(
+                      show: true,
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          getTitlesWidget: (val, meta) {
+                            const days = [
+                              'Mon',
+                              'Tue',
+                              'Wed',
+                              'Thu',
+                              'Fri',
+                              'Sat',
+                              'Sun'
+                            ];
+                            final idx = val.toInt();
+                            if (idx >= 0 && idx < days.length) {
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  days[idx],
+                                  style: const TextStyle(
+                                      color: _ICTColors.textMuted,
+                                      fontSize: 10),
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 26,
+                          getTitlesWidget: (val, meta) => Text(
+                            val.toInt().toString(),
                             style: const TextStyle(
                                 color: _ICTColors.textMuted, fontSize: 10),
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      },
+                          ),
+                        ),
+                      ),
+                      topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false)),
                     ),
-                  ),
-                  topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                ),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (_) => const FlLine(
-                    color: _ICTColors.border,
-                    strokeWidth: 1,
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      getDrawingHorizontalLine: (_) => const FlLine(
+                        color: _ICTColors.border,
+                        strokeWidth: 1,
+                      ),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    barGroups: groups,
                   ),
                 ),
-                borderData: FlBorderData(show: false),
-                barGroups: [
-                  _barGroup(0, 1, 2, 5, 8),
-                  _barGroup(1, 0, 3, 4, 7),
-                  _barGroup(2, 2, 4, 6, 5),
-                  _barGroup(3, 1, 1, 3, 9),
-                  _barGroup(4, 0, 2, 4, 6),
-                  _barGroup(5, 0, 1, 2, 4),
-                  _barGroup(6, 1, 2, 3, 5),
-                ],
-              ),
-            ),
+              );
+            },
           ),
         ],
       ),
@@ -1162,10 +1374,10 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  '• SLA Availability: 99.85% (Optimal) • 28 Incidents Proactively Anticipated\n'
-                  '• BiLSTM Engine: v1.2.0 (F1=0.872, RMSE=0.078) • Mean Detection Time: 1.42s\n'
-                  '• Active Nodes Monitored: 4 regional endpoints (Nairobi, Mombasa, Nakuru, Kisumu)\n'
-                  '• Resource Optimization: 91.4% reduction in inference calls during baseline normal hours',
+                  '• Node health and alert trends are read from live Firestore streams.\n'
+                  '• Model version, F1-score, and RMSE are read from the inference API metadata.\n'
+                  '• Uptime, MTBF, detection lead time, false-positive rate, and SUS are not currently computed from stored records.\n'
+                  '• Reports label unavailable metrics explicitly rather than presenting demo values as measurements.',
                   style: TextStyle(
                     fontSize: 12,
                     color: _ICTColors.textSecondary,

@@ -65,25 +65,67 @@ class _DashboardShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final user = authState is AuthAuthenticated ? authState.user : null;
+    final user = authenticatedUserFrom(authState);
     final username = user?.username ?? 'User';
     final initials = username.isNotEmpty ? username[0].toUpperCase() : 'U';
+    final kpiState = context.watch<KpiBloc>().state;
+    final predictionState = context.watch<PredictionBloc>().state;
+    final lastMetricUpdate = kpiState is KpiLoaded && kpiState.metrics.isNotEmpty
+        ? kpiState.metrics
+            .map((metric) => metric.timestamp)
+            .reduce((a, b) => a.isAfter(b) ? a : b)
+        : null;
+    final modelReady = predictionState is PredictionLoaded &&
+        predictionState.modelApiOnline &&
+        predictionState.modelLoaded;
 
     return Scaffold(
       backgroundColor: _AppColors.bg,
-      appBar: _buildAppBar(context, user, username, initials),
-      body: BlocListener<KpiBloc, KpiState>(
-        listenWhen: (prev, curr) =>
-            curr is KpiLoaded && prev is KpiLoaded
-                ? curr.selectedNode?.nodeId != prev.selectedNode?.nodeId
-                : curr is KpiLoaded && prev is! KpiLoaded,
-        listener: (context, state) {
-          if (state is KpiLoaded && state.selectedNode != null) {
-            context
-                .read<PredictionBloc>()
-                .add(PredictionStarted(state.selectedNode!.nodeId));
-          }
-        },
+      appBar: _buildAppBar(
+        context,
+        user,
+        username,
+        initials,
+        lastMetricUpdate,
+        modelReady,
+      ),
+      body: MultiBlocListener(
+        listeners: [
+          BlocListener<KpiBloc, KpiState>(
+            listenWhen: (previous, current) {
+              if (current is! KpiLoaded) return false;
+              if (previous is! KpiLoaded) return true;
+              return current.selectedNode?.nodeId !=
+                  previous.selectedNode?.nodeId;
+            },
+            listener: (context, state) {
+              if (state is KpiLoaded && state.selectedNode != null) {
+                context
+                    .read<PredictionBloc>()
+                    .add(PredictionStarted(state.selectedNode!.nodeId));
+              }
+            },
+          ),
+          BlocListener<KpiBloc, KpiState>(
+            listenWhen: (previous, current) {
+              if (current is! KpiLoaded || current.metrics.isEmpty) {
+                return false;
+              }
+              if (previous is! KpiLoaded) return true;
+              return previous.selectedNode?.nodeId ==
+                      current.selectedNode?.nodeId &&
+                  previous.metrics != current.metrics;
+            },
+            listener: (context, state) {
+              if (state is KpiLoaded && state.selectedNode != null) {
+                context.read<PredictionBloc>().add(PredictionMetricsReceived(
+                      nodeId: state.selectedNode!.nodeId,
+                      metrics: state.metrics,
+                    ));
+              }
+            },
+          ),
+        ],
         child: BlocBuilder<KpiBloc, KpiState>(
           builder: (context, state) {
             if (state is KpiLoading) {
@@ -108,7 +150,13 @@ class _DashboardShell extends StatelessWidget {
   }
 
   PreferredSizeWidget _buildAppBar(
-      BuildContext context, UserModel? user, String username, String initials) {
+    BuildContext context,
+    UserModel? user,
+    String username,
+    String initials,
+    DateTime? lastMetricUpdate,
+    bool modelReady,
+  ) {
     return AppBar(
       elevation: 0,
       backgroundColor: _AppColors.surface,
@@ -158,7 +206,10 @@ class _DashboardShell extends StatelessWidget {
         ],
       ),
       actions: [
-        _LiveIndicator(),
+        _LiveIndicator(
+          lastMetricUpdate: lastMetricUpdate,
+          modelReady: modelReady,
+        ),
         const SizedBox(width: 8),
         _UserChip(user: user, username: username, initials: initials),
         const SizedBox(width: 8),
@@ -176,14 +227,66 @@ class _DashboardShell extends StatelessWidget {
 }
 
 class _LiveIndicator extends StatelessWidget {
+  final DateTime? lastMetricUpdate;
+  final bool modelReady;
+
+  const _LiveIndicator({
+    required this.lastMetricUpdate,
+    required this.modelReady,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<int>(
+      stream: Stream<int>.periodic(const Duration(seconds: 1), (tick) => tick),
+      initialData: 0,
+      builder: (context, _) {
+        final age = lastMetricUpdate == null
+            ? null
+            : DateTime.now().difference(lastMetricUpdate!);
+        final isFresh =
+            age != null && age >= Duration.zero && age <= const Duration(seconds: 5);
+        final dataColor = isFresh
+            ? _AppColors.healthy
+            : lastMetricUpdate == null
+                ? _AppColors.unknown
+                : _AppColors.warning;
+        final dataLabel = isFresh
+            ? 'DATA LIVE'
+            : lastMetricUpdate == null
+                ? 'WAITING'
+                : 'STALE DATA';
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _StatusBadge(label: dataLabel, color: dataColor),
+            const SizedBox(width: 6),
+            _StatusBadge(
+              label: modelReady ? 'MODEL READY' : 'MODEL OFFLINE',
+              color: modelReady ? _AppColors.accent : _AppColors.unknown,
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _StatusBadge({required this.label, required this.color});
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: _AppColors.healthy.withOpacity(0.12),
+        color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _AppColors.healthy.withOpacity(0.3)),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -191,19 +294,16 @@ class _LiveIndicator extends StatelessWidget {
           Container(
             width: 7,
             height: 7,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: _AppColors.healthy,
-            ),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
           ),
           const SizedBox(width: 6),
-          const Text(
-            'LIVE',
+          Text(
+            label,
             style: TextStyle(
-              color: _AppColors.healthy,
-              fontSize: 11,
+              color: color,
+              fontSize: 10,
               fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
+              letterSpacing: 0.4,
             ),
           ),
         ],
@@ -308,121 +408,265 @@ class _DashboardBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _Sidebar(state: state),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 720) {
+          return _buildNarrowDashboard(context);
+        }
+
+        final showSidebars = constraints.maxWidth >= 1300;
+        return Row(
+          children: [
+            if (showSidebars) _Sidebar(state: state),
+            Expanded(
+              child: _buildWideDashboard(
+                context,
+                showNodeSelector: !showSidebars,
+              ),
+            ),
+            if (showSidebars) const AlertPanel(),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildWideDashboard(
+    BuildContext context, {
+    required bool showNodeSelector,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const _SectionHeader(
+            title: 'Performance & Prediction Telemetry',
+            subtitle: 'Real-time KPI monitoring & BiLSTM fault anticipation',
+          ),
+          if (showNodeSelector) ...[
+            const SizedBox(height: 12),
+            _buildNodeSelector(context),
+          ],
+          const SizedBox(height: 14),
+          Expanded(
+            flex: 3,
+            child: Row(
               children: [
-                _SectionHeader(
-                  title: 'Performance & Prediction Telemetry',
-                  subtitle: 'Real-time KPI monitoring & BiLSTM fault anticipation',
-                ),
-                const SizedBox(height: 14),
                 Expanded(
-                  flex: 3,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _MetricCard(
-                          child: KpiLineChart(
-                            title: 'Latency',
-                            unit: 'ms',
-                            color: _AppColors.accent,
-                            metrics: state.seriesFor(MetricType.latency),
-                            warningThreshold: 80,
-                            criticalThreshold: 120,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: _MetricCard(
-                          child: KpiLineChart(
-                            title: 'Jitter',
-                            unit: 'ms',
-                            color: const Color(0xFFA78BFA),
-                            metrics: state.seriesFor(MetricType.jitter),
-                            warningThreshold: 30,
-                            criticalThreshold: 50,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: _MetricCard(
-                          child: KpiLineChart(
-                            title: 'Packet Loss',
-                            unit: '%',
-                            color: const Color(0xFFFB923C),
-                            metrics: state.seriesFor(MetricType.packetLoss),
-                            warningThreshold: 1.5,
-                            criticalThreshold: 3.0,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: _MetricCard(
+                    child: KpiLineChart(
+                      title: 'Latency',
+                      unit: 'ms',
+                      color: _AppColors.accent,
+                      metrics: state.seriesFor(MetricType.latency),
+                      warningThreshold: 80,
+                      criticalThreshold: 120,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 18),
-                _SectionHeader(
-                  title: 'Network Topology & Predictive Gauge',
-                  subtitle:
-                      '${state.nodes.length} nodes • tap node to inspect live prediction',
-                ),
-                const SizedBox(height: 14),
+                const SizedBox(width: 14),
                 Expanded(
-                  flex: 4,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: _AppColors.surface,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: _AppColors.border),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: NodeMap(
-                            nodes: state.nodes,
-                            selectedNode: state.selectedNode,
-                            onNodeTap: (node) {
-                              context
-                                  .read<KpiBloc>()
-                                  .add(NodeSelected(node.nodeId));
-                              context
-                                  .read<PredictionBloc>()
-                                  .add(PredictionStarted(node.nodeId));
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        flex: 2,
-                        child: BlocBuilder<PredictionBloc, PredictionState>(
-                          builder: (context, predState) {
-                            if (predState is PredictionLoaded) {
-                              return FaultGauge(
-                                prediction: predState.prediction,
-                              );
-                            }
-                            return const FaultGauge(prediction: null);
-                          },
-                        ),
-                      ),
-                    ],
+                  child: _MetricCard(
+                    child: KpiLineChart(
+                      title: 'Jitter',
+                      unit: 'ms',
+                      color: const Color(0xFFA78BFA),
+                      metrics: state.seriesFor(MetricType.jitter),
+                      warningThreshold: 30,
+                      criticalThreshold: 50,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: _MetricCard(
+                    child: KpiLineChart(
+                      title: 'Packet Loss',
+                      unit: '%',
+                      color: const Color(0xFFFB923C),
+                      metrics: state.seriesFor(MetricType.packetLoss),
+                      warningThreshold: 1.5,
+                      criticalThreshold: 3.0,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 18),
+          _SectionHeader(
+            title: 'Network Topology & Predictive Gauge',
+            subtitle:
+                '${state.nodes.length} nodes • tap node to inspect live prediction',
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            flex: 4,
+            child: _buildMapAndGauge(context, mapFlex: 3, gaugeFlex: 2),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNarrowDashboard(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _SectionHeader(
+            title: 'Network Monitoring',
+            subtitle: 'Live KPI telemetry and BiLSTM fault anticipation',
+          ),
+          const SizedBox(height: 12),
+          _buildNodeSelector(context),
+          const SizedBox(height: 16),
+          _MetricCard(
+            child: SizedBox(
+              height: 220,
+              child: KpiLineChart(
+                title: 'Latency',
+                unit: 'ms',
+                color: _AppColors.accent,
+                metrics: state.seriesFor(MetricType.latency),
+                warningThreshold: 80,
+                criticalThreshold: 120,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _MetricCard(
+            child: SizedBox(
+              height: 220,
+              child: KpiLineChart(
+                title: 'Jitter',
+                unit: 'ms',
+                color: const Color(0xFFA78BFA),
+                metrics: state.seriesFor(MetricType.jitter),
+                warningThreshold: 30,
+                criticalThreshold: 50,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _MetricCard(
+            child: SizedBox(
+              height: 220,
+              child: KpiLineChart(
+                title: 'Packet Loss',
+                unit: '%',
+                color: const Color(0xFFFB923C),
+                metrics: state.seriesFor(MetricType.packetLoss),
+                warningThreshold: 1.5,
+                criticalThreshold: 3.0,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          _SectionHeader(
+            title: 'Network Topology',
+            subtitle: '${state.nodes.length} nodes',
+          ),
+          const SizedBox(height: 12),
+          SizedBox(height: 320, child: _buildNodeMap(context)),
+          const SizedBox(height: 12),
+          SizedBox(height: 300, child: _buildPredictionGauge()),
+          const SizedBox(height: 16),
+          const SizedBox(
+            height: 400,
+            child: AlertPanel(width: null),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNodeSelector(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      initialValue: state.selectedNode?.nodeId,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Selected network node',
+        filled: true,
+        fillColor: _AppColors.surface,
+        labelStyle: const TextStyle(color: _AppColors.textSecondary),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: _AppColors.border),
         ),
-        const AlertPanel(),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: _AppColors.border),
+        ),
+      ),
+      dropdownColor: _AppColors.surface,
+      style: const TextStyle(color: _AppColors.textPrimary),
+      items: state.nodes
+          .map(
+            (node) => DropdownMenuItem(
+              value: node.nodeId,
+              child: Text(node.nodeName, overflow: TextOverflow.ellipsis),
+            ),
+          )
+          .toList(),
+      onChanged: (nodeId) {
+        if (nodeId != null) {
+          context.read<KpiBloc>().add(NodeSelected(nodeId));
+        }
+      },
+    );
+  }
+
+  Widget _buildMapAndGauge(
+    BuildContext context, {
+    required int mapFlex,
+    required int gaugeFlex,
+  }) {
+    return Row(
+      children: [
+        Expanded(flex: mapFlex, child: _buildNodeMap(context)),
+        const SizedBox(width: 14),
+        Expanded(flex: gaugeFlex, child: _buildPredictionGauge()),
       ],
+    );
+  }
+
+  Widget _buildNodeMap(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: NodeMap(
+        nodes: state.nodes,
+        selectedNode: state.selectedNode,
+        onNodeTap: (node) {
+          context.read<KpiBloc>().add(NodeSelected(node.nodeId));
+        },
+      ),
+    );
+  }
+
+  Widget _buildPredictionGauge() {
+    return BlocBuilder<PredictionBloc, PredictionState>(
+      builder: (context, predState) {
+        if (predState is PredictionLoaded) {
+          return FaultGauge(
+            prediction: predState.prediction,
+            modelApiAvailable:
+                predState.modelApiOnline && predState.modelLoaded,
+            statusMessage: predState.statusMessage,
+            modelF1Score: predState.modelF1Score,
+          );
+        }
+        return const FaultGauge(
+          prediction: null,
+          modelApiAvailable: false,
+        );
+      },
     );
   }
 }
@@ -598,9 +842,6 @@ class _Sidebar extends StatelessWidget {
                   selected: selected,
                   onTap: () {
                     context.read<KpiBloc>().add(NodeSelected(node.nodeId));
-                    context
-                        .read<PredictionBloc>()
-                        .add(PredictionStarted(node.nodeId));
                   },
                 );
               },

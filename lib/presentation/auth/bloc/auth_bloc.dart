@@ -59,6 +59,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final profile = await _repo.getUserProfile(cred.user!.uid);
 
       if (profile == null) {
+        await _repo.signOut();
         print('[AuthBloc] Login failed: user profile not found.');
         return emit(const AuthError('User profile not found.'));
       }
@@ -69,7 +70,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return emit(const AuthError('Account is deactivated. Contact admin.'));
       }
 
-      await _repo.recordSuccessfulLogin(profile.userId);
+      try {
+        await _repo.recordSuccessfulLogin(profile.userId);
+      } catch (error) {
+        print('[AuthBloc] Could not update last-login timestamp: $error');
+      }
       emit(AuthAuthenticated(profile));
     } catch (err) {
       print('[AuthBloc] Login failed: $err');

@@ -41,8 +41,18 @@ class NetVisionApp extends StatelessWidget {
           colorSchemeSeed: Colors.cyan,
           useMaterial3: true,
         ),
-        home: BlocBuilder<AuthBloc, AuthState>(
-          builder: (context, state) => AppRouter.route(state),
+        home: BlocListener<AuthBloc, AuthState>(
+          listenWhen: (_, state) => state is AuthError && state.user != null,
+          listener: (context, state) {
+            if (state is AuthError) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(state.message)),
+              );
+            }
+          },
+          child: BlocBuilder<AuthBloc, AuthState>(
+            builder: (context, state) => AppRouter.route(state),
+          ),
         ),
       ),
     );

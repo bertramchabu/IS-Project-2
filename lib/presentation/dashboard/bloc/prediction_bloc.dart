@@ -120,7 +120,6 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
         metrics: latestSamples,
       );
       if (_activeNodeId != event.nodeId) return;
-      final current = state;
       emit(PredictionLoaded(
         prediction,
         modelApiOnline: true,
@@ -132,6 +131,23 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
         predictionSource: 'Live BiLSTM API',
       ));
     } catch (error) {
+      if (error is ModelSequenceNotReadyException) {
+        final current = state;
+        emit(PredictionLoaded(
+          current is PredictionLoaded ? current.prediction : null,
+          modelApiOnline: current is PredictionLoaded && current.modelApiOnline,
+          modelLoaded: current is PredictionLoaded && current.modelLoaded,
+          modelVersion:
+              current is PredictionLoaded ? current.modelVersion : 'unknown',
+          modelF1Score:
+              current is PredictionLoaded ? current.modelF1Score : null,
+          modelRmse: current is PredictionLoaded ? current.modelRmse : null,
+          statusMessage: error.message,
+          predictionSource:
+              current is PredictionLoaded ? current.predictionSource : 'Firestore',
+        ));
+        return;
+      }
       print('[PredictionBloc] Live model inference failed: $error');
       if (_activeNodeId != event.nodeId) return;
       final current = state;
@@ -220,8 +236,8 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
   }
 
   @override
-  Future<void> close() {
-    _firestoreSub?.cancel();
-    return super.close();
+  Future<void> close() async {
+    await _firestoreSub?.cancel();
+    await super.close();
   }
 }

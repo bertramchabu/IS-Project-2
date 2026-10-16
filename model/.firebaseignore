@@ -1,0 +1,13 @@
+.*
+!/.python-version
+!/main.py
+!/requirements.txt
+!/models/
+/api/
+/data/
+/results/
+/src/
+/models/*
+!/models/bilstm_fault_model.tflite
+!/models/model_metadata.json
+!/models/scaler.joblib

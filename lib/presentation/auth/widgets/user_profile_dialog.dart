@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../data/models/user_models.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
+import '../bloc/auth_state.dart';
 
 class UserProfileDialog extends StatefulWidget {
   final UserModel user;
@@ -56,6 +57,11 @@ class _UserProfileDialogState extends State<UserProfileDialog> {
     setState(() => _isSaving = true);
     final authBloc = context.read<AuthBloc>();
 
+    final resultFuture = authBloc.stream.firstWhere(
+      (state) =>
+          state is AuthAuthenticated ||
+          (state is AuthError && state.user != null),
+    );
     authBloc.add(
       AuthProfileUpdateRequested(
         username: _usernameController.text.trim(),
@@ -69,26 +75,38 @@ class _UserProfileDialogState extends State<UserProfileDialog> {
       ),
     );
 
-    if (mounted) {
-      Navigator.of(context).pop();
+    final result = await resultFuture;
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+
+    if (result is AuthError) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Color(0xFF22C55E), size: 18),
-              SizedBox(width: 8),
-              Text('Profile updated successfully'),
-            ],
-          ),
-          backgroundColor: const Color(0xFF111827),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: Color(0xFF1F2A3A)),
-          ),
+          content: Text(result.message),
+          backgroundColor: Colors.red.shade700,
         ),
       );
+      return;
     }
+
+    Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Color(0xFF22C55E), size: 18),
+            SizedBox(width: 8),
+            Text('Profile updated successfully'),
+          ],
+        ),
+        backgroundColor: const Color(0xFF111827),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: Color(0xFF1F2A3A)),
+        ),
+      ),
+    );
   }
 
   @override

@@ -5,8 +5,17 @@ import '../../../data/models/prediction_model.dart';
 
 class FaultGauge extends StatelessWidget {
   final PredictionModel? prediction;
+  final bool modelApiAvailable;
+  final String? statusMessage;
+  final double? modelF1Score;
 
-  const FaultGauge({super.key, this.prediction});
+  const FaultGauge({
+    super.key,
+    this.prediction,
+    this.modelApiAvailable = false,
+    this.statusMessage,
+    this.modelF1Score,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -15,8 +24,12 @@ class FaultGauge extends StatelessWidget {
     const textPrimary = Color(0xFFF1F5F9);
     const textMuted = Color(0xFF64748B);
 
-    final probability = prediction?.faultProbability ?? 0.12;
-    final sevColor = _severityColor(prediction?.severity ?? AlertSeverity.low);
+    final probability = prediction?.faultProbability ?? 0;
+    final sevColor = prediction == null
+        ? modelApiAvailable
+            ? const Color(0xFF00E5FF)
+            : textMuted
+        : _severityColor(prediction!.severity);
 
     return Container(
       decoration: BoxDecoration(
@@ -82,7 +95,8 @@ class FaultGauge extends StatelessWidget {
                   border: Border.all(color: sevColor.withOpacity(0.4)),
                 ),
                 child: Text(
-                  prediction?.severityLabel ?? 'LOW',
+                  prediction?.severityLabel ??
+                      (modelApiAvailable ? 'BUFFERING' : 'OFFLINE'),
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
@@ -111,7 +125,9 @@ class FaultGauge extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          '${(probability * 100).toStringAsFixed(0)}%',
+                          prediction == null
+                              ? '--'
+                              : '${(probability * 100).toStringAsFixed(0)}%',
                           style: TextStyle(
                             fontSize: 38,
                             fontWeight: FontWeight.w900,
@@ -121,11 +137,15 @@ class FaultGauge extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          probability >= 0.70
-                              ? 'THRESHOLD EXCEEDED'
-                              : probability >= 0.40
-                                  ? 'ELEVATED RISK'
-                                  : 'NOMINAL (HEALTHY)',
+                          prediction == null
+                              ? modelApiAvailable
+                                  ? 'BUFFERING KPI DATA'
+                                  : 'MODEL CONNECTION REQUIRED'
+                              : probability >= 0.70
+                                  ? 'THRESHOLD EXCEEDED'
+                                  : probability >= 0.40
+                                      ? 'ELEVATED RISK'
+                                      : 'NOMINAL (HEALTHY)',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -152,52 +172,69 @@ class FaultGauge extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: borderColor),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     const Icon(Icons.memory_rounded,
                         size: 14, color: Color(0xFF00E5FF)),
                     const SizedBox(width: 6),
-                    Text(
-                      'BiLSTM ${prediction?.modelVersionId ?? 'v1.2.0'}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: textPrimary,
-                        fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: Text(
+                        'BiLSTM ${prediction?.modelVersionId ?? (modelApiAvailable ? 'loading' : 'offline')}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ],
-                ),
-                Row(
-                  children: [
                     const Icon(Icons.speed_rounded,
                         size: 14, color: Color(0xFF94A3B8)),
                     const SizedBox(width: 4),
                     Text(
-                      '${prediction?.inferenceTimeMs ?? 14} ms',
+                      '${prediction?.inferenceTimeMs ?? '—'} ms',
                       style: const TextStyle(fontSize: 11, color: textMuted),
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF00E5FF).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'F1: 0.87',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF00E5FF),
-                        ),
-                      ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  prediction?.message ?? statusMessage ?? 'Waiting for live KPI data',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10, color: textMuted),
+                ),
+                if (modelF1Score != null || prediction?.computationalSavingsPercent != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      if (modelF1Score != null)
+                        Text(
+                          'F1 ${(modelF1Score! * 100).toStringAsFixed(1)}%',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF00E5FF),
+                          ),
+                        ),
+                      if (modelF1Score != null &&
+                          prediction?.computationalSavingsPercent != null)
+                        const SizedBox(width: 10),
+                      if (prediction?.computationalSavingsPercent != null)
+                        Text(
+                          'Compute saved ${prediction!.computationalSavingsPercent}%',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF22C55E),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

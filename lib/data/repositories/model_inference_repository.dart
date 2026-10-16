@@ -1,8 +1,4 @@
-import 'dart:async';
-import 'dart:convert';
-
-import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../models/alert_model.dart';
 import '../models/kpi_metric_model.dart';
@@ -26,50 +22,36 @@ class ModelApiStatus {
   });
 }
 
+class ModelSequenceNotReadyException implements Exception {
+  final String message;
+
+  const ModelSequenceNotReadyException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class ModelInferenceRepository {
-  final http.Client _client;
-  final Uri _baseUri;
+  static const _windowSize = 10;
+  static const _sampleGroupingWindow = Duration(milliseconds: 750);
+
+  final FirebaseFunctions _functions;
   String _modelVersion = 'unknown';
   double? _f1Score;
   double? _rmse;
 
-  ModelInferenceRepository({
-    http.Client? client,
-    Uri? baseUri,
-  })  : _client = client ?? http.Client(),
-        _baseUri = baseUri ?? _defaultBaseUri();
-
-  static Uri _defaultBaseUri() {
-    const configuredUrl = String.fromEnvironment('MODEL_API_BASE_URL');
-    if (configuredUrl.isNotEmpty) {
-      return Uri.parse(configuredUrl);
-    }
-
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      return Uri.parse('http://10.0.2.2:8000');
-    }
-    return Uri.parse('http://127.0.0.1:8000');
-  }
+  ModelInferenceRepository({FirebaseFunctions? functions})
+      : _functions = functions ??
+            FirebaseFunctions.instanceFor(region: 'us-central1');
 
   Future<ModelApiStatus> checkStatus() async {
-    final response = await _client
-        .get(_baseUri.resolve('/health'))
-        .timeout(const Duration(seconds: 4));
-    final health = _decodeObject(response);
-    final isOnline = health['status'] == 'online';
-    final isModelLoaded =
-        health['model_loaded'] == true && health['scaler_loaded'] == true;
-
-    if (isModelLoaded) {
-      final metadataResponse = await _client
-          .get(_baseUri.resolve('/model/metadata'))
-          .timeout(const Duration(seconds: 4));
-      final metadata = _decodeObject(metadataResponse);
-      _modelVersion =
-          metadata['version_number'] as String? ?? _modelVersion;
-      _f1Score = _optionalDouble(metadata['f1_score']);
-      _rmse = _optionalDouble(metadata['rmse']);
-    }
+    final result = await _functions.httpsCallable('model_status').call();
+    final status = _asMap(result.data);
+    final isOnline = status['online'] == true;
+    final isModelLoaded = status['model_loaded'] == true;
+    _modelVersion = status['model_version'] as String? ?? 'unknown';
+    _f1Score = _optionalDouble(status['f1_score']);
+    _rmse = _optionalDouble(status['rmse']);
 
     return ModelApiStatus(
       isOnline: isOnline,
@@ -78,8 +60,8 @@ class ModelInferenceRepository {
       f1Score: _f1Score,
       rmse: _rmse,
       message: isModelLoaded
-          ? 'Model ${_modelVersion} is ready'
-          : 'Inference API is reachable, but model artifacts are not loaded',
+          ? 'Model $_modelVersion is ready'
+          : 'Model function is reachable, but the model is not loaded',
     );
   }
 
@@ -87,100 +69,116 @@ class ModelInferenceRepository {
     required String nodeId,
     required List<KpiMetricModel> metrics,
   }) async {
-    final latestByType = <MetricType, KpiMetricModel>{};
-    for (final metric in metrics) {
-      final current = latestByType[metric.metricType];
-      if (current == null || metric.timestamp.isAfter(current.timestamp)) {
-        latestByType[metric.metricType] = metric;
-      }
-    }
-
-    if (MetricType.values.any((type) => !latestByType.containsKey(type))) {
-      throw StateError('Waiting for all five KPI types before inference.');
-    }
-
-    final samples = MetricType.values.map((type) => latestByType[type]!).toList();
-    final timestamps = samples.map((sample) => sample.timestamp).toList();
-    timestamps.sort();
-    if (timestamps.last.difference(timestamps.first) >
-        const Duration(seconds: 5)) {
-      throw StateError('Latest KPI values are not from the same time window.');
-    }
-
-    final response = await _client
-        .post(
-          _baseUri.resolve('/predict/live-metric'),
-          headers: const {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'node_id': nodeId,
-            'timestamp': timestamps.last.toUtc().toIso8601String(),
-            'kpis': {
-              for (var index = 0; index < MetricType.values.length; index++)
-                _apiMetricName(MetricType.values[index]):
-                    samples[index].value,
-            },
-          }),
-        )
-        .timeout(const Duration(seconds: 4));
-    final result = _decodeObject(response);
-
-    final probability = _requiredDouble(result, 'fault_probability');
+    final sequence = _buildSequence(metrics);
+    final result = await _functions.httpsCallable('predict_fault').call({
+      'node_id': nodeId,
+      'sequence': sequence,
+    });
+    final prediction = _asMap(result.data);
+    final probability = _requiredDouble(prediction, 'fault_probability');
     if (probability < 0 || probability > 1) {
       throw const FormatException(
-        'Model API returned a fault probability outside 0..1.',
+        'Model function returned a fault probability outside 0..1.',
       );
     }
 
-    final timestampValue = result['timestamp'];
+    final timestampValue = prediction['timestamp'];
     final predictionTimestamp = timestampValue is num
         ? DateTime.fromMillisecondsSinceEpoch(
             (timestampValue * 1000).round(),
             isUtc: true,
           )
         : DateTime.now().toUtc();
+    _modelVersion =
+        prediction['model_version'] as String? ?? _modelVersion;
 
     return PredictionModel(
       predictionId: '$nodeId-${predictionTimestamp.microsecondsSinceEpoch}',
       nodeId: nodeId,
       modelVersionId: _modelVersion,
       faultProbability: probability,
-      severity: _severityFromApi(result['severity'] as String?),
-      inputFeatures: samples.map((sample) => sample.value).toList(),
-      inferenceTimeMs: _optionalDouble(result['inference_latency_ms'])?.round(),
-      adaptiveReductionApplied:
-          (_optionalDouble(result['computational_savings_percent']) ?? 0) > 0,
+      severity: _severityFromApi(prediction['severity'] as String?),
+      inputFeatures: sequence.last.values.toList(),
+      inferenceTimeMs: _optionalDouble(prediction['inference_latency_ms'])?.round(),
+      adaptiveReductionApplied: false,
       predictionTimestamp: predictionTimestamp,
-      triggeredBy: 'Live BiLSTM API',
-      operationalStatus: result['status'] as String?,
-      message: result['message'] as String?,
+      triggeredBy: 'Firebase BiLSTM Function',
+      operationalStatus: prediction['status'] as String?,
+      message: prediction['message'] as String?,
       computationalSavingsPercent:
-          _optionalDouble(result['computational_savings_percent'])?.round(),
+          _optionalDouble(prediction['computational_savings_percent'])?.round(),
       nextSamplingIntervalSeconds:
-          _optionalDouble(result['next_sampling_interval_sec']),
+          _optionalDouble(prediction['next_sampling_interval_sec']),
       modelF1Score: _f1Score,
       modelRmse: _rmse,
     );
   }
 
-  Map<String, dynamic> _decodeObject(http.Response response) {
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw http.ClientException(
-        'Model API returned HTTP ${response.statusCode}: ${response.body}',
-        response.request?.url,
+  List<Map<String, double>> _buildSequence(List<KpiMetricModel> metrics) {
+    final sorted = metrics.toList()
+      ..sort((left, right) => left.timestamp.compareTo(right.timestamp));
+    final samples = <List<KpiMetricModel>>[];
+    var group = <KpiMetricModel>[];
+    DateTime? groupStart;
+
+    void finishGroup() {
+      if (group.isNotEmpty) samples.add(group);
+      group = [];
+      groupStart = null;
+    }
+
+    for (final metric in sorted) {
+      if (groupStart != null &&
+          metric.timestamp.difference(groupStart!) > _sampleGroupingWindow) {
+        finishGroup();
+      }
+      groupStart ??= metric.timestamp;
+      group.add(metric);
+    }
+    finishGroup();
+
+    final alignedSamples = <Map<MetricType, KpiMetricModel>>[];
+    for (final sampleGroup in samples) {
+      final latestByType = <MetricType, KpiMetricModel>{};
+      for (final metric in sampleGroup) {
+        final current = latestByType[metric.metricType];
+        if (current == null || metric.timestamp.isAfter(current.timestamp)) {
+          latestByType[metric.metricType] = metric;
+        }
+      }
+      if (MetricType.values.every(latestByType.containsKey)) {
+        alignedSamples.add(latestByType);
+      }
+    }
+
+    if (alignedSamples.length < _windowSize) {
+      throw ModelSequenceNotReadyException(
+        'Buffering KPI sequence (${alignedSamples.length}/$_windowSize samples).',
       );
     }
 
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map<String, dynamic>) {
-      throw const FormatException('Model API response must be a JSON object.');
+    final recentSamples = alignedSamples.skip(alignedSamples.length - _windowSize);
+    return recentSamples.map((sample) {
+      return {
+        for (final type in MetricType.values)
+          _apiMetricName(type): sample[type]!.value,
+      };
+    }).toList();
+  }
+
+  Map<String, dynamic> _asMap(Object? value) {
+    if (value is! Map) {
+      throw const FormatException(
+        'Model function response must be a JSON object.',
+      );
     }
-    return decoded;
+    return Map<String, dynamic>.from(value);
   }
 
   double _requiredDouble(Map<String, dynamic> response, String key) {
     final value = _optionalDouble(response[key]);
     if (value == null || !value.isFinite) {
-      throw FormatException('Model API response is missing numeric "$key".');
+      throw FormatException('Model response is missing numeric "$key".');
     }
     return value;
   }
@@ -206,9 +204,8 @@ class ModelInferenceRepository {
   AlertSeverity _severityFromApi(String? severity) {
     switch (severity?.toUpperCase()) {
       case 'CRITICAL':
-        return AlertSeverity.critical;
       case 'HIGH':
-        return AlertSeverity.high;
+        return AlertSeverity.critical;
       case 'MEDIUM':
       case 'WARNING':
         return AlertSeverity.medium;
