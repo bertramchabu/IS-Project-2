@@ -5,10 +5,7 @@ import threading
 import time
 from typing import Any
 
-import joblib
-import numpy as np
 from firebase_functions import https_fn, options
-from tflite_runtime.interpreter import Interpreter
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
 FEATURES = (
@@ -21,10 +18,11 @@ FEATURES = (
 WINDOW_SIZE = 10
 ALERT_THRESHOLD = 0.70
 WARNING_THRESHOLD = 0.30
+HEALTHY_SAMPLING_INTERVAL_SEC = 10.0
 
 _assets_lock = threading.Lock()
 _inference_lock = threading.Lock()
-_interpreter: Interpreter | None = None
+_interpreter: Any = None
 _input_details: dict[str, Any] | None = None
 _output_details: dict[str, Any] | None = None
 _scaler: Any = None
@@ -39,6 +37,10 @@ def _load_assets() -> None:
     with _assets_lock:
         if _interpreter is not None:
             return
+
+        import joblib
+        import numpy as np
+        from tflite_runtime.interpreter import Interpreter
 
         interpreter = Interpreter(
             model_path=os.path.join(MODEL_DIR, "bilstm_fault_model.tflite"),
@@ -148,6 +150,8 @@ def predict_fault(request: https_fn.CallableRequest) -> dict[str, Any]:
         ) from error
 
     try:
+        import numpy as np
+
         _load_assets()
         assert _interpreter is not None
         assert _input_details is not None
@@ -203,7 +207,12 @@ def predict_fault(request: https_fn.CallableRequest) -> dict[str, Any]:
         message = f"Degradation precursor detected ({probability:.1%})."
     else:
         status, severity, alert_triggered = "HEALTHY", "NORMAL", False
-        message = f"Fault probability is {probability:.1%}; no alert threshold was reached."
+        message = (
+            f"Fault probability is {probability:.1%}; sampling reduced to "
+            f"every {HEALTHY_SAMPLING_INTERVAL_SEC:g} seconds."
+        )
+
+    healthy = probability < WARNING_THRESHOLD
 
     return {
         "node_id": node_id,
@@ -212,8 +221,10 @@ def predict_fault(request: https_fn.CallableRequest) -> dict[str, Any]:
         "severity": severity,
         "alert_triggered": alert_triggered,
         "inference_latency_ms": round(inference_latency_ms, 2),
-        "next_sampling_interval_sec": 1.0,
-        "computational_savings_percent": 0,
+        "next_sampling_interval_sec": (
+            HEALTHY_SAMPLING_INTERVAL_SEC if healthy else 1.0
+        ),
+        "computational_savings_percent": 90 if healthy else 0,
         "message": message,
         "timestamp": time.time(),
         "model_version": _metadata_value("version_number") or "unknown",

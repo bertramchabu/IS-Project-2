@@ -1,7 +1,7 @@
 # NetVision AI
 
 Flutter/Firebase network-monitoring dashboard with live KPI telemetry and
-optional BiLSTM fault anticipation through the FastAPI model service.
+BiLSTM fault anticipation through authenticated Firebase callable functions.
 
 ## Run the Flutter app
 
@@ -16,28 +16,31 @@ Firebase must be configured for the target platform. The dashboard provides
 role-specific views for network administrators, ICT managers, and system
 administrators. Network-node records and KPI documents are read from Firestore.
 
-## Run the model API
+## Deploy the BiLSTM model function
 
-The model API is optional; monitoring remains available when the API is offline,
-but model-based predictions are shown as unavailable. First install the Python
-dependencies used by `model/api/app.py` and make sure the trained model and
-scaler exist under `model/models/`. Then, from the `model` directory, start the
-service:
-
-```powershell
-python -m uvicorn api.app:app --host 0.0.0.0 --port 8000
-```
-
-The API health endpoint is `http://127.0.0.1:8000/health`; interactive API
-documentation is at `http://127.0.0.1:8000/docs`. For Android emulators the app
-defaults to `http://10.0.2.2:8000`; for web and desktop it defaults to
-`http://127.0.0.1:8000`. Override the base URL at build/run time when needed:
+The `model` Firebase Functions codebase runs the TFLite model and scaler from
+`model/models/`. It exposes authenticated `model_status` and `predict_fault`
+callables in `us-central1`; the Flutter client uses Firebase Auth tokens through
+the Cloud Functions SDK. Before deploying, make sure the trained files
+`bilstm_fault_model.tflite`, `scaler.joblib`, and `model_metadata.json` are
+present under `model/models/`, then deploy the model codebase:
 
 ```powershell
-flutter run --dart-define=MODEL_API_BASE_URL=http://<host>:8000
+firebase deploy --only functions:model --project netvision-ai-0
 ```
 
-The live inference endpoint accepts one combined KPI sample per node. The API
-buffers ten samples before returning a prediction, so the model status can show
-as initializing while this window fills. The five required values are latency,
-jitter, packet loss, retransmission rate, and signal strength.
+Cloud Functions deployment requires the Firebase project to use the Blaze
+pay-as-you-go plan and have billing enabled. The model codebase is configured
+for Python 3.11 and TensorFlow Lite, with a 512 MiB memory limit and at most five
+instances. Deploy the existing Node.js functions separately with
+`firebase deploy --only functions:default --project netvision-ai-0`.
+
+Each prediction request contains a complete ten-timestep window of five aligned
+metrics: latency, jitter, packet loss, retransmission rate, and signal strength.
+The client builds this window from recent Firestore KPI documents, so inference
+does not depend on in-memory state shared between function instances. The gauge
+shows a buffering status until ten complete samples are available. If the
+function is unavailable, live monitoring continues and model-based predictions
+are marked unavailable. For healthy predictions below 30% fault probability,
+the client follows the model response and reduces inference requests to one per
+10 seconds; at elevated risk it resumes one-second inference.

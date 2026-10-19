@@ -31,21 +31,39 @@ class ModelSequenceNotReadyException implements Exception {
   String toString() => message;
 }
 
+class ModelKpiWindow {
+  final List<Map<String, double>> sequence;
+  final String sampleKey;
+  final DateTime timestamp;
+  final int sampleCount;
+
+  const ModelKpiWindow({
+    required this.sequence,
+    required this.sampleKey,
+    required this.timestamp,
+    required this.sampleCount,
+  });
+
+  bool get isReady => sampleCount >= ModelInferenceRepository.windowSize;
+}
+
 class ModelInferenceRepository {
-  static const _windowSize = 10;
+  static const windowSize = 10;
   static const _sampleGroupingWindow = Duration(milliseconds: 750);
 
-  final FirebaseFunctions _functions;
+  FirebaseFunctions? _functions;
   String _modelVersion = 'unknown';
   double? _f1Score;
   double? _rmse;
 
   ModelInferenceRepository({FirebaseFunctions? functions})
-      : _functions = functions ??
-            FirebaseFunctions.instanceFor(region: 'us-central1');
+      : _functions = functions;
+
+  FirebaseFunctions get _callables =>
+      _functions ??= FirebaseFunctions.instanceFor(region: 'us-central1');
 
   Future<ModelApiStatus> checkStatus() async {
-    final result = await _functions.httpsCallable('model_status').call();
+    final result = await _callables.httpsCallable('model_status').call();
     final status = _asMap(result.data);
     final isOnline = status['online'] == true;
     final isModelLoaded = status['model_loaded'] == true;
@@ -67,12 +85,16 @@ class ModelInferenceRepository {
 
   Future<PredictionModel> predictLiveMetric({
     required String nodeId,
-    required List<KpiMetricModel> metrics,
+    required ModelKpiWindow window,
   }) async {
-    final sequence = _buildSequence(metrics);
-    final result = await _functions.httpsCallable('predict_fault').call({
+    if (!window.isReady) {
+      throw ModelSequenceNotReadyException(
+        'Buffering KPI sequence (${window.sampleCount}/$windowSize samples).',
+      );
+    }
+    final result = await _callables.httpsCallable('predict_fault').call({
       'node_id': nodeId,
-      'sequence': sequence,
+      'sequence': window.sequence,
     });
     final prediction = _asMap(result.data);
     final probability = _requiredDouble(prediction, 'fault_probability');
@@ -89,8 +111,7 @@ class ModelInferenceRepository {
             isUtc: true,
           )
         : DateTime.now().toUtc();
-    _modelVersion =
-        prediction['model_version'] as String? ?? _modelVersion;
+    _modelVersion = prediction['model_version'] as String? ?? _modelVersion;
 
     return PredictionModel(
       predictionId: '$nodeId-${predictionTimestamp.microsecondsSinceEpoch}',
@@ -98,8 +119,9 @@ class ModelInferenceRepository {
       modelVersionId: _modelVersion,
       faultProbability: probability,
       severity: _severityFromApi(prediction['severity'] as String?),
-      inputFeatures: sequence.last.values.toList(),
-      inferenceTimeMs: _optionalDouble(prediction['inference_latency_ms'])?.round(),
+      inputFeatures: window.sequence.last.values.toList(),
+      inferenceTimeMs:
+          _optionalDouble(prediction['inference_latency_ms'])?.round(),
       adaptiveReductionApplied: false,
       predictionTimestamp: predictionTimestamp,
       triggeredBy: 'Firebase BiLSTM Function',
@@ -114,7 +136,7 @@ class ModelInferenceRepository {
     );
   }
 
-  List<Map<String, double>> _buildSequence(List<KpiMetricModel> metrics) {
+  ModelKpiWindow? latestWindow(List<KpiMetricModel> metrics) {
     final sorted = metrics.toList()
       ..sort((left, right) => left.timestamp.compareTo(right.timestamp));
     final samples = <List<KpiMetricModel>>[];
@@ -151,19 +173,30 @@ class ModelInferenceRepository {
       }
     }
 
-    if (alignedSamples.length < _windowSize) {
-      throw ModelSequenceNotReadyException(
-        'Buffering KPI sequence (${alignedSamples.length}/$_windowSize samples).',
-      );
-    }
+    if (alignedSamples.isEmpty) return null;
 
-    final recentSamples = alignedSamples.skip(alignedSamples.length - _windowSize);
-    return recentSamples.map((sample) {
-      return {
-        for (final type in MetricType.values)
-          _apiMetricName(type): sample[type]!.value,
-      };
-    }).toList();
+    final lastSample = alignedSamples.last;
+    final sampleTimestamps =
+        lastSample.values.map((metric) => metric.timestamp).toList();
+    final latestTimestamp = sampleTimestamps
+        .reduce((left, right) => left.isAfter(right) ? left : right);
+    final startIndex = alignedSamples.length > windowSize
+        ? alignedSamples.length - windowSize
+        : 0;
+    final recentSamples = alignedSamples.skip(startIndex).toList();
+
+    return ModelKpiWindow(
+      sequence: recentSamples.map((sample) {
+        return {
+          for (final type in MetricType.values)
+            _apiMetricName(type): sample[type]!.value,
+        };
+      }).toList(),
+      sampleKey:
+          MetricType.values.map((type) => lastSample[type]!.metricId).join('|'),
+      timestamp: latestTimestamp,
+      sampleCount: alignedSamples.length,
+    );
   }
 
   Map<String, dynamic> _asMap(Object? value) {

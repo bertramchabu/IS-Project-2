@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/models/kpi_metric_model.dart';
 import '../../../data/repositories/prediction_repository.dart';
 import '../../../data/repositories/model_inference_repository.dart';
 import 'prediction_event.dart';
@@ -13,6 +12,7 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
   StreamSubscription? _firestoreSub;
   String? _activeNodeId;
   String? _lastSampleKey;
+  DateTime? _nextInferenceAllowedAt;
 
   PredictionBloc(this._repo, this._modelRepo)
       : super(const PredictionInitial()) {
@@ -35,6 +35,7 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
   ) async {
     _activeNodeId = event.nodeId;
     _lastSampleKey = null;
+    _nextInferenceAllowedAt = null;
     await _firestoreSub?.cancel();
     emit(const PredictionLoading());
     _firestoreSub = _repo.watchLatestPrediction(event.nodeId).listen(
@@ -86,40 +87,48 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
   ) async {
     if (event.nodeId != _activeNodeId) return;
 
-    final latestByType = <MetricType, KpiMetricModel>{};
-    for (final metric in event.metrics) {
-      final current = latestByType[metric.metricType];
-      if (current == null || metric.timestamp.isAfter(current.timestamp)) {
-        latestByType[metric.metricType] = metric;
-      }
+    final window = _modelRepo.latestWindow(event.metrics);
+    if (window == null ||
+        DateTime.now().difference(window.timestamp) >
+            const Duration(seconds: 10)) {
+      return;
     }
-    if (MetricType.values.any((type) => !latestByType.containsKey(type))) {
+    if (window.sampleKey == _lastSampleKey) return;
+    _lastSampleKey = window.sampleKey;
+    if (_nextInferenceAllowedAt != null &&
+        DateTime.now().isBefore(_nextInferenceAllowedAt!)) {
       return;
     }
 
-    final latestSamples =
-        MetricType.values.map((type) => latestByType[type]!).toList();
-    final newestTimestamp = latestSamples
-        .map((sample) => sample.timestamp)
-        .reduce((a, b) => a.isAfter(b) ? a : b);
-    if (DateTime.now().difference(newestTimestamp) >
-        const Duration(seconds: 10)) {
+    if (!window.isReady) {
+      final current = state;
+      emit(PredictionLoaded(
+        current is PredictionLoaded ? current.prediction : null,
+        modelApiOnline: current is PredictionLoaded && current.modelApiOnline,
+        modelLoaded: current is PredictionLoaded && current.modelLoaded,
+        modelVersion:
+            current is PredictionLoaded ? current.modelVersion : 'unknown',
+        modelF1Score: current is PredictionLoaded ? current.modelF1Score : null,
+        modelRmse: current is PredictionLoaded ? current.modelRmse : null,
+        statusMessage:
+            'Buffering KPI sequence (${window.sampleCount}/${ModelInferenceRepository.windowSize} samples).',
+        predictionSource: current is PredictionLoaded
+            ? current.predictionSource
+            : 'Firestore',
+      ));
       return;
     }
-
-    final sampleKey = latestSamples
-        .map((sample) =>
-            '${sample.metricType.name}:${sample.timestamp.microsecondsSinceEpoch}')
-        .join('|');
-    if (sampleKey == _lastSampleKey) return;
-    _lastSampleKey = sampleKey;
 
     try {
       final prediction = await _modelRepo.predictLiveMetric(
         nodeId: event.nodeId,
-        metrics: latestSamples,
+        window: window,
       );
       if (_activeNodeId != event.nodeId) return;
+      final nextInterval = prediction.nextSamplingIntervalSeconds ?? 1.0;
+      _nextInferenceAllowedAt = DateTime.now().add(
+        Duration(milliseconds: (nextInterval * 1000).round()),
+      );
       emit(PredictionLoaded(
         prediction,
         modelApiOnline: true,
@@ -143,8 +152,9 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
               current is PredictionLoaded ? current.modelF1Score : null,
           modelRmse: current is PredictionLoaded ? current.modelRmse : null,
           statusMessage: error.message,
-          predictionSource:
-              current is PredictionLoaded ? current.predictionSource : 'Firestore',
+          predictionSource: current is PredictionLoaded
+              ? current.predictionSource
+              : 'Firestore',
         ));
         return;
       }
@@ -157,12 +167,12 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
         modelLoaded: false,
         modelVersion:
             current is PredictionLoaded ? current.modelVersion : 'unknown',
-        modelF1Score:
-            current is PredictionLoaded ? current.modelF1Score : null,
+        modelF1Score: current is PredictionLoaded ? current.modelF1Score : null,
         modelRmse: current is PredictionLoaded ? current.modelRmse : null,
         statusMessage: 'Live inference failed: $error',
-        predictionSource:
-            current is PredictionLoaded ? current.predictionSource : 'Firestore',
+        predictionSource: current is PredictionLoaded
+            ? current.predictionSource
+            : 'Firestore',
       ));
     }
   }
@@ -187,10 +197,10 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
       modelF1Score: current is PredictionLoaded
           ? current.modelF1Score
           : event.prediction?.modelF1Score,
-      modelRmse:
-          current is PredictionLoaded ? current.modelRmse : event.prediction?.modelRmse,
-      statusMessage:
-          current is PredictionLoaded ? current.statusMessage : null,
+      modelRmse: current is PredictionLoaded
+          ? current.modelRmse
+          : event.prediction?.modelRmse,
+      statusMessage: current is PredictionLoaded ? current.statusMessage : null,
       predictionSource: 'Firestore',
     ));
   }
@@ -209,9 +219,8 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
       modelF1Score: event.f1Score,
       modelRmse: event.rmse,
       statusMessage: event.message,
-      predictionSource: current is PredictionLoaded
-          ? current.predictionSource
-          : 'Firestore',
+      predictionSource:
+          current is PredictionLoaded ? current.predictionSource : 'Firestore',
     ));
   }
 
