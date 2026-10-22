@@ -34,13 +34,14 @@ class KpiLineChart extends StatelessWidget {
     final values = metrics.map((m) => m.value).toList();
     final minY = values.reduce((a, b) => a < b ? a : b);
     final maxY = values.reduce((a, b) => a > b ? a : b);
-    final padding =
-        maxY == minY ? (maxY.abs() * 0.05).clamp(1, double.infinity) : (maxY - minY) * 0.2;
+    final padding = maxY == minY
+        ? (maxY.abs() * 0.05).clamp(1, double.infinity)
+        : (maxY - minY) * 0.2;
     final latest = metrics.last.value;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -53,16 +54,14 @@ class KpiLineChart extends StatelessWidget {
                 Text(
                   '${latest.toStringAsFixed(1)} $unit',
                   style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: color),
+                      fontSize: 20, fontWeight: FontWeight.bold, color: color),
                 ),
               ],
             ),
             const SizedBox(height: 4),
             StreamBuilder<int>(
-              stream:
-                  Stream<int>.periodic(const Duration(seconds: 1), (tick) => tick),
+              stream: Stream<int>.periodic(
+                  const Duration(seconds: 1), (tick) => tick),
               initialData: 0,
               builder: (context, _) {
                 final age = DateTime.now().difference(metrics.last.timestamp);
@@ -88,18 +87,19 @@ class KpiLineChart extends StatelessWidget {
             Expanded(
               child: LineChart(
                 LineChartData(
-                  minY: (minY - padding).clamp(0, double.infinity),
+                  minY: minY - padding,
                   maxY: maxY + padding,
-                  gridData: const FlGridData(show: true, drawVerticalLine: false),
+                  gridData:
+                      const FlGridData(show: true, drawVerticalLine: false),
                   titlesData: const FlTitlesData(
-                    leftTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    topTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
+                    leftTitles:
+                        AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles:
+                        AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles:
+                        AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles:
+                        AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
                   borderData: FlBorderData(show: false),
                   lineBarsData: [
@@ -144,22 +144,25 @@ class KpiLineChart extends StatelessWidget {
       BuildContext context, String title, String unit, Color color) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title,
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w600)),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             const Spacer(),
             Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.show_chart, color: color.withValues(alpha: 0.5), size: 40),
-                  const SizedBox(height: 8),
-                  const Text('No data available',
-                      style: TextStyle(color: Colors.white54)),
+                  Icon(Icons.show_chart,
+                      color: color.withValues(alpha: 0.5), size: 24),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'No data available',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
                 ],
               ),
             ),

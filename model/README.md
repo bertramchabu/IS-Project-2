@@ -22,36 +22,19 @@ NetVision AI provides proactive network fault anticipation using a lightweight *
 ## Project Structure
 
 ```
-modeltraining/
-├── api/
-│   └── app.py                            # FastAPI real-time REST service with adaptive load throttling
-├── data/
-│   ├── network_kpi_dataset.csv            # 5-KPI simulated dataset (4 nodes, 48,000 total records)
-│   ├── train_kpi_dataset.csv              # 80% chronological training split
-│   └── test_kpi_dataset.csv               # 20% held-out test split
-├── models/
-│   ├── bilstm_fault_model.keras          # Trained serialized Keras model
-│   ├── bilstm_fault_model.tflite         # Lightweight TensorFlow Lite model for edge deployment
-│   ├── scaler.joblib                      # Fitted StandardScaler for KPI preprocessing
-│   └── model_metadata.json               # Schema metadata for database table model_versions
-├── report/
-│   └── COMPARATIVE_EVALUATION_REPORT.md  # Formal academic deliverable report
-├── results/
-│   ├── training_history.png              # Loss and RMSE optimization curves
-│   ├── confusion_matrix.png              # Classification confusion matrix
-│   ├── roc_curve.png                     # Receiver Operating Characteristic curve (AUC = 0.9999)
-│   ├── comparative_metrics.png           # BiLSTM vs Baseline threshold monitoring comparison
-│   ├── evaluation_report.json            # Numerical evaluation metrics
-│   └── comparative_evaluation.json       # Comparative benchmarking data
-├── src/
-│   ├── dataset_generator.py              # Realistic network simulation with fault precursors
-│   ├── model.py                          # BiLSTM architecture definition per Section 3.2.3
-│   ├── train.py                          # Training pipeline with early stopping & checkpoints
-│   ├── evaluate.py                       # Evaluation on held-out test split
-│   ├── adaptive_inference.py             # Adaptive rate controller (90% reduction below 30% prob)
-│   └── baseline_comparator.py            # Comparative evaluation against static thresholds
-├── run_pipeline.py                       # Master end-to-end execution script
-└── README.md                             # Documentation & instructions
+model/
+├── main.py                 # Authenticated Firebase callable model_status/predict_fault
+├── api/app.py              # Optional local FastAPI inference service
+├── data/                   # Generated and chronological train/test KPI datasets
+├── models/                 # Keras/TFLite models, scaler, and model metadata
+├── results/                # Evaluation reports and plots
+└── src/
+    ├── dataset_generator.py
+    ├── model.py            # BiLSTM architecture and built-in-ops TFLite export
+    ├── train.py
+    ├── evaluate.py
+    ├── adaptive_inference.py
+    └── baseline_comparator.py
 ```
 
 ---
@@ -67,19 +50,33 @@ modeltraining/
 | **System Usability Scale (SUS)**| $\ge 70.0$ | **83.5 / 100** | **PASSED** |
 | **Adaptive Load Reduction** | 90% load savings when prob $< 30\%$ | **Implemented & Active** | **PASSED** |
 
+The stored comparative results report baseline F1 **0.9308** and BiLSTM F1
+**0.8593**. The model meets its standalone F1 target, but those figures do not
+show that it outperforms the baseline on F1. Reproduce and reconcile the
+comparison before presenting it as a model F1 improvement.
+
 ---
 
 ## How to Run
 
-### 1. Execute End-to-End Pipeline
-To re-generate data, train the BiLSTM model, run evaluations, and generate charts:
+### 1. Generate and evaluate the model
+Run these commands from the `model` directory. Training regenerates the KPI
+data, scaler, Keras model, and TFLite model. Evaluation scripts use the
+generated held-out dataset:
 ```powershell
-py -3.13 run_pipeline.py
+py -3.13 -m src.train
+py -3.13 -m src.evaluate
+py -3.13 -m src.baseline_comparator
 ```
 
-### 2. Start Real-Time REST API
-To launch the FastAPI server for Flutter dashboard integration:
+The TFLite export uses built-in operators only, so it can run with the
+lightweight `tflite-runtime` dependency used by Firebase Functions.
+
+### 2. Start the local REST API
+The Firebase callable functions are the inference path used by the Flutter
+dashboard. To run the separate local FastAPI service:
 ```powershell
+py -3.13 -m pip install -r api\requirements.txt
 py -3.13 -m uvicorn api.app:app --host 127.0.0.1 --port 8000 --reload
 ```
 Open interactive Swagger API docs at: `http://127.0.0.1:8000/docs`

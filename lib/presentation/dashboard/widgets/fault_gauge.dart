@@ -8,6 +8,7 @@ class FaultGauge extends StatelessWidget {
   final bool modelApiAvailable;
   final String? statusMessage;
   final double? modelF1Score;
+  final VoidCallback? onRetry;
 
   const FaultGauge({
     super.key,
@@ -15,6 +16,7 @@ class FaultGauge extends StatelessWidget {
     this.modelApiAvailable = false,
     this.statusMessage,
     this.modelF1Score,
+    this.onRetry,
   });
 
   @override
@@ -110,56 +112,75 @@ class FaultGauge extends StatelessWidget {
 
           // Central Radial Gauge
           Expanded(
-            child: Center(
-              child: CustomPaint(
-                size: const Size(190, 190),
-                painter: _RadialGaugePainter(
-                  probability: probability,
-                  color: sevColor,
-                ),
-                child: SizedBox(
-                  width: 190,
-                  height: 190,
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          prediction == null
-                              ? '--'
-                              : '${(probability * 100).toStringAsFixed(0)}%',
-                          style: TextStyle(
-                            fontSize: 38,
-                            fontWeight: FontWeight.w900,
-                            color: sevColor,
-                            letterSpacing: -1,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final gaugeWidth = math.min(300.0, constraints.maxWidth);
+                final gaugeHeight = math.min(190.0, constraints.maxHeight);
+                return Center(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(end: probability),
+                    duration: const Duration(milliseconds: 850),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, animatedProbability, _) => SizedBox(
+                      width: gaugeWidth,
+                      height: gaugeHeight,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          CustomPaint(
+                            painter: _SpeedometerPainter(
+                              probability: animatedProbability,
+                              color: sevColor,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          prediction == null
-                              ? modelApiAvailable
-                                  ? 'BUFFERING KPI DATA'
-                                  : 'MODEL CONNECTION REQUIRED'
-                              : probability >= 0.70
-                                  ? 'THRESHOLD EXCEEDED'
-                                  : probability >= 0.40
-                                      ? 'ELEVATED RISK'
-                                      : 'NOMINAL (HEALTHY)',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: probability >= 0.70
-                                ? const Color(0xFFEF4444)
-                                : const Color(0xFF94A3B8),
-                            letterSpacing: 1.1,
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  prediction == null
+                                      ? '--'
+                                      : '${(animatedProbability * 100).toStringAsFixed(0)}%',
+                                  style: TextStyle(
+                                    fontSize: 32,
+                                    height: 1,
+                                    fontWeight: FontWeight.w900,
+                                    color: sevColor,
+                                    letterSpacing: -1,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  prediction == null
+                                      ? modelApiAvailable
+                                          ? 'BUFFERING KPI DATA'
+                                          : 'MODEL CONNECTION REQUIRED'
+                                      : probability >= 0.70
+                                          ? 'THRESHOLD EXCEEDED'
+                                          : probability >= 0.40
+                                              ? 'ELEVATED RISK'
+                                              : 'NOMINAL (HEALTHY)',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: probability >= 0.70
+                                        ? const Color(0xFFEF4444)
+                                        : const Color(0xFF94A3B8),
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
           const SizedBox(height: 10),
@@ -202,13 +223,35 @@ class FaultGauge extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  prediction?.message ?? statusMessage ?? 'Waiting for live KPI data',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10, color: textMuted),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        prediction?.message ??
+                            statusMessage ??
+                            'Waiting for live KPI data',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10, color: textMuted),
+                      ),
+                    ),
+                    if (!modelApiAvailable && onRetry != null)
+                      IconButton(
+                        onPressed: onRetry,
+                        tooltip: 'Retry model connection',
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 28,
+                          height: 28,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        color: const Color(0xFF00E5FF),
+                      ),
+                  ],
                 ),
-                if (modelF1Score != null || prediction?.computationalSavingsPercent != null) ...[
+                if (modelF1Score != null ||
+                    prediction?.computationalSavingsPercent != null) ...[
                   const SizedBox(height: 4),
                   Row(
                     children: [
@@ -257,72 +300,173 @@ class FaultGauge extends StatelessWidget {
   }
 }
 
-class _RadialGaugePainter extends CustomPainter {
+class _SpeedometerPainter extends CustomPainter {
   final double probability;
   final Color color;
 
-  _RadialGaugePainter({required this.probability, required this.color});
+  _SpeedometerPainter({required this.probability, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width, size.height) / 2 - 12;
-
-    // Background track arc
-    final bgPaint = Paint()
-      ..color = const Color(0xFF1F2A3A)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 12
-      ..strokeCap = StrokeCap.round;
-
-    const startAngle = math.pi * 0.75;
-    const sweepAngle = math.pi * 1.5;
+    const tickCount = 20;
+    const startAngle = math.pi;
+    const sweepAngle = math.pi;
+    final radius = math.min(size.width * 0.43, size.height * 0.65);
+    final pivot = Offset(size.width / 2, size.height * 0.72);
+    final arcRect = Rect.fromCircle(center: pivot, radius: radius);
 
     canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
+      arcRect,
       startAngle,
       sweepAngle,
       false,
-      bgPaint,
+      Paint()
+        ..color = const Color(0xFF1F2A3A)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 15
+        ..strokeCap = StrokeCap.round,
     );
 
-    // Value active arc
-    final valSweep = (sweepAngle * probability.clamp(0.0, 1.0));
-    if (valSweep > 0) {
-      final valuePaint = Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 12
-        ..strokeCap = StrokeCap.round;
-
+    const riskColors = [
+      Color(0xFF22C55E),
+      Color(0xFF84CC16),
+      Color(0xFFF59E0B),
+      Color(0xFFF97316),
+      Color(0xFFEF4444),
+    ];
+    for (var i = 0; i < riskColors.length; i++) {
       canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        valSweep,
+        arcRect,
+        startAngle + sweepAngle * i / riskColors.length,
+        sweepAngle / riskColors.length - 0.025,
         false,
-        valuePaint,
+        Paint()
+          ..color = riskColors[i].withOpacity(0.38)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5
+          ..strokeCap = StrokeCap.round,
       );
     }
 
-    // 70% Alert Threshold Tick Mark
-    final thresholdAngle = startAngle + sweepAngle * 0.70;
-    final markerPaint = Paint()
-      ..color = const Color(0xFFEF4444)
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round;
+    final activeSweep = sweepAngle * probability.clamp(0.0, 1.0);
+    if (activeSweep > 0) {
+      canvas.drawArc(
+        arcRect,
+        startAngle,
+        activeSweep,
+        false,
+        Paint()
+          ..color = color.withOpacity(0.25)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 18
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      );
+      canvas.drawArc(
+        arcRect,
+        startAngle,
+        activeSweep,
+        false,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 8
+          ..strokeCap = StrokeCap.round,
+      );
+    }
 
-    final innerPoint = Offset(
-      center.dx + (radius - 10) * math.cos(thresholdAngle),
-      center.dy + (radius - 10) * math.sin(thresholdAngle),
+    for (var i = 0; i <= tickCount; i++) {
+      final fraction = i / tickCount;
+      final angle = startAngle + sweepAngle * fraction;
+      final majorTick = i % 2 == 0;
+      final innerRadius = radius - (majorTick ? 17 : 11);
+      final outerRadius = radius - 3;
+      final tickPaint = Paint()
+        ..color = majorTick ? const Color(0xFFCBD5E1) : const Color(0xFF64748B)
+        ..strokeWidth = majorTick ? 2 : 1
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(
+        Offset(
+          pivot.dx + innerRadius * math.cos(angle),
+          pivot.dy + innerRadius * math.sin(angle),
+        ),
+        Offset(
+          pivot.dx + outerRadius * math.cos(angle),
+          pivot.dy + outerRadius * math.sin(angle),
+        ),
+        tickPaint,
+      );
+
+      if (majorTick) {
+        final label = TextPainter(
+          text: TextSpan(
+            text: '${(fraction * 100).round()}',
+            style: const TextStyle(
+              color: Color(0xFF94A3B8),
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final labelRadius = radius - 31;
+        label.paint(
+          canvas,
+          Offset(
+            pivot.dx + labelRadius * math.cos(angle) - label.width / 2,
+            pivot.dy + labelRadius * math.sin(angle) - label.height / 2,
+          ),
+        );
+      }
+    }
+
+    final needleAngle = startAngle + sweepAngle * probability.clamp(0.0, 1.0);
+    final needleLength = radius * 0.76;
+    final needleTip = Offset(
+      pivot.dx + needleLength * math.cos(needleAngle),
+      pivot.dy + needleLength * math.sin(needleAngle),
     );
-    final outerPoint = Offset(
-      center.dx + (radius + 10) * math.cos(thresholdAngle),
-      center.dy + (radius + 10) * math.sin(thresholdAngle),
+    canvas.drawLine(
+      pivot,
+      needleTip,
+      Paint()
+        ..color = color.withOpacity(0.25)
+        ..strokeWidth = 9
+        ..strokeCap = StrokeCap.round,
     );
-    canvas.drawLine(innerPoint, outerPoint, markerPaint);
+    canvas.drawLine(
+      pivot,
+      needleTip,
+      Paint()
+        ..color = color
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawCircle(
+      pivot,
+      8,
+      Paint()..color = const Color(0xFF0B1220),
+    );
+    canvas.drawCircle(
+      pivot,
+      5,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.fill,
+    );
+
+    final thresholdAngle = startAngle + sweepAngle * 0.70;
+    final thresholdPoint = Offset(
+      pivot.dx + (radius + 12) * math.cos(thresholdAngle),
+      pivot.dy + (radius + 12) * math.sin(thresholdAngle),
+    );
+    canvas.drawCircle(
+      thresholdPoint,
+      3,
+      Paint()..color = const Color(0xFFEF4444),
+    );
   }
 
   @override
-  bool shouldRepaint(_RadialGaugePainter old) =>
+  bool shouldRepaint(_SpeedometerPainter old) =>
       old.probability != probability || old.color != color;
 }

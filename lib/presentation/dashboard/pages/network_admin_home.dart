@@ -1,11 +1,17 @@
+import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/models/kpi_metric_model.dart';
 import '../../../data/models/network_node_model.dart';
 import '../../../data/models/user_models.dart';
 import '../../../di/service_locator.dart' as di;
+import '../../../services/csv_telemetry_replay.dart';
 import '../../alerts/bloc/alert_bloc.dart';
 import '../../alerts/bloc/alert_event.dart';
+import '../../alerts/bloc/alert_state.dart';
 import '../../alerts/widgets/alert_panel.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../../auth/bloc/auth_event.dart';
@@ -59,8 +65,138 @@ class NetworkAdminHome extends StatelessWidget {
   }
 }
 
-class _DashboardShell extends StatelessWidget {
+class _DashboardShell extends StatefulWidget {
   const _DashboardShell();
+
+  @override
+  State<_DashboardShell> createState() => _DashboardShellState();
+}
+
+class _DashboardShellState extends State<_DashboardShell> {
+  CsvTelemetryReplay? _telemetryReplay;
+  Timer? _simulationTimer;
+  bool _replayLoading = false;
+  bool _autoReplayAttempted = false;
+  String? _predictionNodeId;
+
+  bool get _isSimulationActive => _simulationTimer != null;
+
+  Future<void> _toggleSimulation() async {
+    if (_isSimulationActive) {
+      _simulationTimer?.cancel();
+      _simulationTimer = null;
+      final kpiBloc = context.read<KpiBloc>();
+      kpiBloc.add(const KpiSimulationModeChanged(false));
+      final current = kpiBloc.state;
+      if (current is KpiLoaded && current.selectedNode != null) {
+        context
+            .read<PredictionBloc>()
+            .add(PredictionStarted(current.selectedNode!.nodeId));
+      }
+      setState(() {});
+      return;
+    }
+
+    await _startCsvReplay();
+  }
+
+  Future<void> _startCsvReplay() async {
+    final kpiBloc = context.read<KpiBloc>();
+    final current = kpiBloc.state;
+    if (current is! KpiLoaded || current.selectedNode == null) return;
+
+    if (_replayLoading) return;
+    setState(() => _replayLoading = true);
+    try {
+      _telemetryReplay ??= await CsvTelemetryReplay.load();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load CSV telemetry: $error')),
+        );
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _replayLoading = false);
+    }
+    if (!mounted) return;
+
+    final replayState = kpiBloc.state;
+    if (replayState is! KpiLoaded || replayState.selectedNode == null) return;
+    final locationIndex = _locationIndexFor(
+      replayState.nodes,
+      replayState.selectedNode!.nodeId,
+    );
+    if (locationIndex < 0 ||
+        locationIndex >= _telemetryReplay!.sourceIds.length) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'CSV replay has ${_telemetryReplay!.sourceIds.length} locations, '
+            'so it cannot replay this location’s alphabetical position.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    kpiBloc.add(const KpiSimulationModeChanged(true));
+    _simulationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final state = kpiBloc.state;
+      final selectedNode = state is KpiLoaded ? state.selectedNode : null;
+      if (state is! KpiLoaded || selectedNode == null) return;
+
+      final timestamp = DateTime.now();
+      final locationIndex = _locationIndexFor(state.nodes, selectedNode.nodeId);
+      if (locationIndex < 0 ||
+          locationIndex >= _telemetryReplay!.sourceIds.length) {
+        _simulationTimer?.cancel();
+        _simulationTimer = null;
+        kpiBloc.add(const KpiSimulationModeChanged(false));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'CSV replay has ${_telemetryReplay!.sourceIds.length} locations, '
+                'but the selected location has no matching alphabetical slot.',
+              ),
+            ),
+          );
+          setState(() {});
+        }
+        return;
+      }
+      kpiBloc.add(KpiSimulationMetricsUpdated(
+        nodeId: selectedNode.nodeId,
+        metrics: _telemetryReplay!.sample(
+          locationIndex: locationIndex,
+          nodeId: selectedNode.nodeId,
+          timestamp: timestamp,
+        ),
+      ));
+    });
+    setState(() {});
+  }
+
+  int _locationIndexFor(List<NetworkNodeModel> nodes, String nodeId) {
+    final orderedNodes = [...nodes]..sort((a, b) {
+        final byName = a.nodeName.compareTo(b.nodeName);
+        return byName != 0 ? byName : a.nodeId.compareTo(b.nodeId);
+      });
+    return orderedNodes.indexWhere((node) => node.nodeId == nodeId);
+  }
+
+  void _startPredictionForNode(String nodeId) {
+    if (_predictionNodeId == nodeId) return;
+    _predictionNodeId = nodeId;
+    context.read<PredictionBloc>().add(PredictionStarted(nodeId));
+  }
+
+  @override
+  void dispose() {
+    _simulationTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,11 +206,24 @@ class _DashboardShell extends StatelessWidget {
     final initials = username.isNotEmpty ? username[0].toUpperCase() : 'U';
     final kpiState = context.watch<KpiBloc>().state;
     final predictionState = context.watch<PredictionBloc>().state;
-    final lastMetricUpdate = kpiState is KpiLoaded && kpiState.metrics.isNotEmpty
-        ? kpiState.metrics
-            .map((metric) => metric.timestamp)
-            .reduce((a, b) => a.isAfter(b) ? a : b)
-        : null;
+    if (!_autoReplayAttempted &&
+        kpiState is KpiLoaded &&
+        kpiState.selectedNode != null) {
+      _autoReplayAttempted = true;
+      final nodeId = kpiState.selectedNode!.nodeId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _startPredictionForNode(nodeId);
+          unawaited(_startCsvReplay());
+        }
+      });
+    }
+    final lastMetricUpdate =
+        kpiState is KpiLoaded && kpiState.metrics.isNotEmpty
+            ? kpiState.metrics
+                .map((metric) => metric.timestamp)
+                .reduce((a, b) => a.isAfter(b) ? a : b)
+            : null;
     final modelReady = predictionState is PredictionLoaded &&
         predictionState.modelApiOnline &&
         predictionState.modelLoaded;
@@ -88,6 +237,9 @@ class _DashboardShell extends StatelessWidget {
         initials,
         lastMetricUpdate,
         modelReady,
+        _isSimulationActive,
+        _replayLoading,
+        _toggleSimulation,
       ),
       body: MultiBlocListener(
         listeners: [
@@ -100,9 +252,7 @@ class _DashboardShell extends StatelessWidget {
             },
             listener: (context, state) {
               if (state is KpiLoaded && state.selectedNode != null) {
-                context
-                    .read<PredictionBloc>()
-                    .add(PredictionStarted(state.selectedNode!.nodeId));
+                _startPredictionForNode(state.selectedNode!.nodeId);
               }
             },
           ),
@@ -156,7 +306,12 @@ class _DashboardShell extends StatelessWidget {
     String initials,
     DateTime? lastMetricUpdate,
     bool modelReady,
+    bool simulationActive,
+    bool replayLoading,
+    VoidCallback onSimulationToggle,
   ) {
+    final compactActions = MediaQuery.sizeOf(context).width < 900;
+
     return AppBar(
       elevation: 0,
       backgroundColor: _AppColors.surface,
@@ -175,8 +330,7 @@ class _DashboardShell extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.hub_rounded,
-                color: Colors.white, size: 20),
+            child: const Icon(Icons.hub_rounded, color: Colors.white, size: 20),
           ),
           const SizedBox(width: 12),
           const Column(
@@ -206,9 +360,58 @@ class _DashboardShell extends StatelessWidget {
         ],
       ),
       actions: [
+        if (compactActions)
+          IconButton(
+            onPressed: replayLoading ? null : onSimulationToggle,
+            tooltip:
+                simulationActive ? 'Stop CSV replay' : 'Start live CSV replay',
+            icon: replayLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    simulationActive
+                        ? Icons.stop_circle_outlined
+                        : Icons.play_circle_outline_rounded,
+                    color: simulationActive
+                        ? _AppColors.warning
+                        : _AppColors.accent,
+                  ),
+          )
+        else
+          TextButton.icon(
+            onPressed: replayLoading ? null : onSimulationToggle,
+            icon: replayLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    simulationActive
+                        ? Icons.stop_circle_outlined
+                        : Icons.play_circle_outline_rounded,
+                    size: 18,
+                  ),
+            label: Text(
+              replayLoading
+                  ? 'LOADING DATA'
+                  : simulationActive
+                      ? 'STOP REPLAY'
+                      : 'LIVE REPLAY',
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor:
+                  simulationActive ? _AppColors.warning : _AppColors.accent,
+            ),
+          ),
+        const SizedBox(width: 6),
         _LiveIndicator(
           lastMetricUpdate: lastMetricUpdate,
           modelReady: modelReady,
+          simulationActive: simulationActive,
         ),
         const SizedBox(width: 8),
         _UserChip(user: user, username: username, initials: initials),
@@ -229,10 +432,12 @@ class _DashboardShell extends StatelessWidget {
 class _LiveIndicator extends StatelessWidget {
   final DateTime? lastMetricUpdate;
   final bool modelReady;
+  final bool simulationActive;
 
   const _LiveIndicator({
     required this.lastMetricUpdate,
     required this.modelReady,
+    required this.simulationActive,
   });
 
   @override
@@ -244,18 +449,23 @@ class _LiveIndicator extends StatelessWidget {
         final age = lastMetricUpdate == null
             ? null
             : DateTime.now().difference(lastMetricUpdate!);
-        final isFresh =
-            age != null && age >= Duration.zero && age <= const Duration(seconds: 5);
-        final dataColor = isFresh
-            ? _AppColors.healthy
-            : lastMetricUpdate == null
-                ? _AppColors.unknown
-                : _AppColors.warning;
-        final dataLabel = isFresh
-            ? 'DATA LIVE'
-            : lastMetricUpdate == null
-                ? 'WAITING'
-                : 'STALE DATA';
+        final isFresh = age != null &&
+            age >= Duration.zero &&
+            age <= const Duration(seconds: 5);
+        final dataColor = simulationActive
+            ? _AppColors.accent
+            : isFresh
+                ? _AppColors.healthy
+                : lastMetricUpdate == null
+                    ? _AppColors.unknown
+                    : _AppColors.warning;
+        final dataLabel = simulationActive
+            ? 'DEMO LIVE'
+            : isFresh
+                ? 'DATA LIVE'
+                : lastMetricUpdate == null
+                    ? 'WAITING'
+                    : 'STALE DATA';
 
         return Row(
           mainAxisSize: MainAxisSize.min,
@@ -326,9 +536,7 @@ class _UserChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: user == null
-          ? null
-          : () => UserProfileDialog.show(context, user!),
+      onTap: user == null ? null : () => UserProfileDialog.show(context, user!),
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -401,10 +609,143 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
-class _DashboardBody extends StatelessWidget {
+class _DashboardBody extends StatefulWidget {
   final KpiLoaded state;
 
   const _DashboardBody({required this.state});
+
+  @override
+  State<_DashboardBody> createState() => _DashboardBodyState();
+}
+
+class _DashboardBodyState extends State<_DashboardBody> {
+  bool _alertsOpen = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final panelWidth = math.min(
+          400.0,
+          math.max(0.0, constraints.maxWidth - 24),
+        );
+        return Stack(
+          children: [
+            Positioned.fill(child: _DashboardContent(state: widget.state)),
+            if (_alertsOpen)
+              Positioned(
+                top: 12,
+                right: 12,
+                bottom: 12,
+                width: panelWidth,
+                child: AlertPanel(
+                  width: null,
+                  onClose: () => setState(() => _alertsOpen = false),
+                ),
+              )
+            else
+              Positioned(
+                right: 16,
+                bottom: constraints.maxWidth < 720 ? 16 : null,
+                top: constraints.maxWidth < 720 ? null : 16,
+                child: _AlertOverlayButton(
+                  onPressed: () => setState(() => _alertsOpen = true),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _AlertOverlayButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _AlertOverlayButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<AlertBloc, AlertState>(
+      builder: (context, state) {
+        final activeCount = state is AlertLoaded ? state.activeCount : 0;
+        final hasCritical = state is AlertLoaded && state.criticalCount > 0;
+        final indicator = hasCritical
+            ? _AppColors.critical
+            : activeCount > 0
+                ? _AppColors.warning
+                : _AppColors.accent;
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Material(
+              color: const Color(0xCC111827),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: BorderSide(color: indicator.withOpacity(0.42)),
+              ),
+              child: InkWell(
+                onTap: onPressed,
+                borderRadius: BorderRadius.circular(18),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.notifications_active_rounded,
+                        color: indicator,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Alerts',
+                        style: TextStyle(
+                          color: _AppColors.textPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (activeCount > 0) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: indicator,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '$activeCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DashboardContent extends StatelessWidget {
+  final KpiLoaded state;
+
+  const _DashboardContent({required this.state});
 
   @override
   Widget build(BuildContext context) {
@@ -424,7 +765,6 @@ class _DashboardBody extends StatelessWidget {
                 showNodeSelector: !showSidebars,
               ),
             ),
-            if (showSidebars) const AlertPanel(),
           ],
         );
       },
@@ -449,45 +789,83 @@ class _DashboardBody extends StatelessWidget {
           ],
           const SizedBox(height: 14),
           Expanded(
-            flex: 3,
-            child: Row(
+            flex: 4,
+            child: Column(
               children: [
                 Expanded(
-                  child: _MetricCard(
-                    child: KpiLineChart(
-                      title: 'Latency',
-                      unit: 'ms',
-                      color: _AppColors.accent,
-                      metrics: state.seriesFor(MetricType.latency),
-                      warningThreshold: 80,
-                      criticalThreshold: 120,
-                    ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _MetricCard(
+                          child: KpiLineChart(
+                            title: 'Latency',
+                            unit: 'ms',
+                            color: _AppColors.accent,
+                            metrics: state.seriesFor(MetricType.latency),
+                            warningThreshold: 80,
+                            criticalThreshold: 120,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: _MetricCard(
+                          child: KpiLineChart(
+                            title: 'Jitter',
+                            unit: 'ms',
+                            color: const Color(0xFFA78BFA),
+                            metrics: state.seriesFor(MetricType.jitter),
+                            warningThreshold: 30,
+                            criticalThreshold: 50,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: _MetricCard(
+                          child: KpiLineChart(
+                            title: 'Packet Loss',
+                            unit: '%',
+                            color: const Color(0xFFFB923C),
+                            metrics: state.seriesFor(MetricType.packetLoss),
+                            warningThreshold: 1.5,
+                            criticalThreshold: 3.0,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(height: 10),
                 Expanded(
-                  child: _MetricCard(
-                    child: KpiLineChart(
-                      title: 'Jitter',
-                      unit: 'ms',
-                      color: const Color(0xFFA78BFA),
-                      metrics: state.seriesFor(MetricType.jitter),
-                      warningThreshold: 30,
-                      criticalThreshold: 50,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: _MetricCard(
-                    child: KpiLineChart(
-                      title: 'Packet Loss',
-                      unit: '%',
-                      color: const Color(0xFFFB923C),
-                      metrics: state.seriesFor(MetricType.packetLoss),
-                      warningThreshold: 1.5,
-                      criticalThreshold: 3.0,
-                    ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _MetricCard(
+                          child: KpiLineChart(
+                            title: 'Retransmission',
+                            unit: '%',
+                            color: const Color(0xFF38BDF8),
+                            metrics: state.seriesFor(
+                              MetricType.retransmissionRate,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: _MetricCard(
+                          child: KpiLineChart(
+                            title: 'Signal Strength',
+                            unit: 'dBm',
+                            color: const Color(0xFF4ADE80),
+                            metrics: state.seriesFor(
+                              MetricType.signalStrength,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -501,7 +879,7 @@ class _DashboardBody extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Expanded(
-            flex: 4,
+            flex: 3,
             child: _buildMapAndGauge(context, mapFlex: 3, gaugeFlex: 2),
           ),
         ],
@@ -563,6 +941,30 @@ class _DashboardBody extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          _MetricCard(
+            child: SizedBox(
+              height: 220,
+              child: KpiLineChart(
+                title: 'Retransmission',
+                unit: '%',
+                color: const Color(0xFF38BDF8),
+                metrics: state.seriesFor(MetricType.retransmissionRate),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _MetricCard(
+            child: SizedBox(
+              height: 220,
+              child: KpiLineChart(
+                title: 'Signal Strength',
+                unit: 'dBm',
+                color: const Color(0xFF4ADE80),
+                metrics: state.seriesFor(MetricType.signalStrength),
+              ),
+            ),
+          ),
           const SizedBox(height: 20),
           _SectionHeader(
             title: 'Network Topology',
@@ -571,12 +973,7 @@ class _DashboardBody extends StatelessWidget {
           const SizedBox(height: 12),
           SizedBox(height: 320, child: _buildNodeMap(context)),
           const SizedBox(height: 12),
-          SizedBox(height: 300, child: _buildPredictionGauge()),
-          const SizedBox(height: 16),
-          const SizedBox(
-            height: 400,
-            child: AlertPanel(width: null),
-          ),
+          SizedBox(height: 380, child: _buildPredictionGauge()),
         ],
       ),
     );
@@ -660,6 +1057,11 @@ class _DashboardBody extends StatelessWidget {
                 predState.modelApiOnline && predState.modelLoaded,
             statusMessage: predState.statusMessage,
             modelF1Score: predState.modelF1Score,
+            onRetry: state.selectedNode == null
+                ? null
+                : () => context.read<PredictionBloc>().add(
+                      PredictionStarted(state.selectedNode!.nodeId),
+                    ),
           );
         }
         return const FaultGauge(
@@ -754,15 +1156,12 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final healthy = state.nodes
-        .where((n) => n.status == NodeStatus.healthy)
-        .length;
-    final warning = state.nodes
-        .where((n) => n.status == NodeStatus.warning)
-        .length;
-    final critical = state.nodes
-        .where((n) => n.status == NodeStatus.critical)
-        .length;
+    final healthy =
+        state.nodes.where((n) => n.status == NodeStatus.healthy).length;
+    final warning =
+        state.nodes.where((n) => n.status == NodeStatus.warning).length;
+    final critical =
+        state.nodes.where((n) => n.status == NodeStatus.critical).length;
 
     return Container(
       width: 280,
@@ -814,13 +1213,19 @@ class _Sidebar extends StatelessWidget {
                 Row(
                   children: [
                     _StatusPill(
-                        label: 'Healthy', count: healthy, color: _AppColors.healthy),
+                        label: 'Healthy',
+                        count: healthy,
+                        color: _AppColors.healthy),
                     const SizedBox(width: 6),
                     _StatusPill(
-                        label: 'Warn', count: warning, color: _AppColors.warning),
+                        label: 'Warn',
+                        count: warning,
+                        color: _AppColors.warning),
                     const SizedBox(width: 6),
                     _StatusPill(
-                        label: 'Crit', count: critical, color: _AppColors.critical),
+                        label: 'Crit',
+                        count: critical,
+                        color: _AppColors.critical),
                   ],
                 ),
               ],
@@ -835,8 +1240,7 @@ class _Sidebar extends StatelessWidget {
               separatorBuilder: (_, __) => const SizedBox(height: 2),
               itemBuilder: (context, index) {
                 final node = state.nodes[index];
-                final selected =
-                    state.selectedNode?.nodeId == node.nodeId;
+                final selected = state.selectedNode?.nodeId == node.nodeId;
                 return _NodeTile(
                   node: node,
                   selected: selected,

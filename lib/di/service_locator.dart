@@ -46,7 +46,7 @@ Future<void> init() async {
     () => PredictionRepository(firestore: sl<FirebaseFirestore>()),
   );
   sl.registerLazySingleton<ModelInferenceRepository>(
-    () => ModelInferenceRepository(),
+    () => ModelInferenceRepository(auth: sl<FirebaseAuth>()),
   );
 
   // ---------- Blocs ----------

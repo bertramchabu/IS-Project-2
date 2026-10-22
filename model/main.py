@@ -5,7 +5,16 @@ import threading
 import time
 from typing import Any
 
+import firebase_admin
 from firebase_functions import https_fn, options
+
+firebase_admin.initialize_app(
+    options={
+        "projectId": os.environ.get("GCLOUD_PROJECT")
+        or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        or "netvision-ai-0"
+    }
+)
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
 FEATURES = (

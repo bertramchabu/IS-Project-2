@@ -34,6 +34,28 @@ class KpiMetricsUpdated extends KpiEvent {
   List<Object?> get props => [metrics];
 }
 
+class KpiSimulationModeChanged extends KpiEvent {
+  final bool isEnabled;
+
+  const KpiSimulationModeChanged(this.isEnabled);
+
+  @override
+  List<Object?> get props => [isEnabled];
+}
+
+class KpiSimulationMetricsUpdated extends KpiEvent {
+  final String nodeId;
+  final List<KpiMetricModel> metrics;
+
+  const KpiSimulationMetricsUpdated({
+    required this.nodeId,
+    required this.metrics,
+  });
+
+  @override
+  List<Object?> get props => [nodeId, metrics];
+}
+
 /// Internal event for when the node list updates.
 class NodesUpdated extends KpiEvent {
   final List<NetworkNodeModel> nodes;
@@ -43,6 +65,7 @@ class NodesUpdated extends KpiEvent {
   @override
   List<Object?> get props => [nodes];
 }
+
 class KpiStreamError extends KpiEvent {
   final String message;
 

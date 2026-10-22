@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/auth_repository.dart';
 import 'auth_event.dart';
@@ -49,14 +50,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(const AuthLoading());
+    UserCredential? credential;
 
     try {
-      final cred = await _repo.signIn(
+      credential = await _repo.signIn(
         email: event.email,
         password: event.password,
       );
 
-      final profile = await _repo.getUserProfile(cred.user!.uid);
+      final signedInUser = credential.user;
+      if (signedInUser == null) {
+        throw StateError('Firebase sign-in completed without a user.');
+      }
+      final profile = await _repo.getUserProfile(signedInUser.uid);
 
       if (profile == null) {
         await _repo.signOut();
@@ -78,6 +84,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(AuthAuthenticated(profile));
     } catch (err) {
       print('[AuthBloc] Login failed: $err');
+      final signedInUid = credential?.user?.uid;
+      if (signedInUid != null && _repo.currentUser?.uid == signedInUid) {
+        try {
+          await _repo.signOut();
+        } catch (signOutError) {
+          print('[AuthBloc] Could not clear incomplete login: $signOutError');
+          emit(const AuthError(
+            'Sign-in could not finish and the session could not be cleared. '
+            'Please restart the app and try again.',
+          ));
+          return;
+        }
+      }
       emit(AuthError(_mapError(err)));
     }
   }
@@ -150,6 +169,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
     if (s.contains('network-request-failed')) {
       return 'No network connection. Check your internet.';
+    }
+    if (s.contains('permission-denied')) {
+      return 'Signed in, but unable to load your account profile. '
+          'Check your account access and try again.';
     }
     return 'Authentication failed. Please try again.';
   }

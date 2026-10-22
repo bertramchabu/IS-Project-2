@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/prediction_repository.dart';
 import '../../../data/repositories/model_inference_repository.dart';
@@ -65,8 +66,8 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
           message: status.message,
         ));
       }
-    } catch (error) {
-      print('[PredictionBloc] Model API health check failed: $error');
+    } catch (error, stackTrace) {
+      _logModelError('Model API health check failed', error, stackTrace);
       if (_activeNodeId == event.nodeId) {
         add(PredictionApiStatusChanged(
           nodeId: event.nodeId,
@@ -139,7 +140,7 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
         statusMessage: prediction.message,
         predictionSource: 'Live BiLSTM API',
       ));
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (error is ModelSequenceNotReadyException) {
         final current = state;
         emit(PredictionLoaded(
@@ -158,7 +159,7 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
         ));
         return;
       }
-      print('[PredictionBloc] Live model inference failed: $error');
+      _logModelError('Live model inference failed', error, stackTrace);
       if (_activeNodeId != event.nodeId) return;
       final current = state;
       emit(PredictionLoaded(
@@ -175,6 +176,21 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
             : 'Firestore',
       ));
     }
+  }
+
+  void _logModelError(
+    String context,
+    Object error,
+    StackTrace stackTrace,
+  ) {
+    print('[PredictionBloc] $context: $error');
+    if (error is FirebaseFunctionsException) {
+      print(
+        '[PredictionBloc] Callable error details: '
+        'code=${error.code}, message=${error.message}, details=${error.details}',
+      );
+    }
+    print('[PredictionBloc] Error stack trace:\n$stackTrace');
   }
 
   Future<void> _onFirestoreUpdated(

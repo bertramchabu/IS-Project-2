@@ -12,6 +12,7 @@ class KpiBloc extends Bloc<KpiEvent, KpiState> {
 
   StreamSubscription? _nodesSub;
   StreamSubscription? _metricsSub;
+  bool _simulationMode = false;
 
   KpiBloc({
     required NodeRepository nodeRepo,
@@ -22,6 +23,8 @@ class KpiBloc extends Bloc<KpiEvent, KpiState> {
     on<DashboardStarted>(_onStarted);
     on<NodeSelected>(_onNodeSelected);
     on<KpiMetricsUpdated>(_onMetricsUpdated);
+    on<KpiSimulationModeChanged>(_onSimulationModeChanged);
+    on<KpiSimulationMetricsUpdated>(_onSimulationMetricsUpdated);
     on<NodesUpdated>(_onNodesUpdated);
     on<KpiStreamError>(_onStreamError);
   }
@@ -40,10 +43,12 @@ class KpiBloc extends Bloc<KpiEvent, KpiState> {
 
     await _nodesSub?.cancel();
     _nodesSub = _nodeRepo.watchAllNodes().listen(
-      (nodes) => add(NodesUpdated(nodes)),                  // ✅ event, not emit
-      onError: (e) => add(KpiStreamError(e.toString())),    // ✅ event, not emit
-    );
+          (nodes) => add(NodesUpdated(nodes)), // ✅ event, not emit
+          onError: (e) =>
+              add(KpiStreamError(e.toString())), // ✅ event, not emit
+        );
   }
+
   Future<void> _onNodesUpdated(
     NodesUpdated event,
     Emitter<KpiState> emit,
@@ -89,9 +94,11 @@ class KpiBloc extends Bloc<KpiEvent, KpiState> {
     await _metricsSub?.cancel();
 
     // Subscribe to all recent metrics for this node
-    _metricsSub = _kpiRepo
-        .watchLatestPerType(event.nodeId)
-        .listen(
+    _subscribeToMetrics(event.nodeId);
+  }
+
+  void _subscribeToMetrics(String nodeId) {
+    _metricsSub = _kpiRepo.watchLatestPerType(nodeId).listen(
           (metrics) => add(KpiMetricsUpdated(metrics)),
           onError: (e) => add(KpiStreamError(e.toString())),
         );
@@ -101,10 +108,53 @@ class KpiBloc extends Bloc<KpiEvent, KpiState> {
     KpiMetricsUpdated event,
     Emitter<KpiState> emit,
   ) async {
+    if (_simulationMode) return;
     final current = state;
     if (current is KpiLoaded) {
       emit(current.copyWith(metrics: event.metrics));
     }
+  }
+
+  Future<void> _onSimulationModeChanged(
+    KpiSimulationModeChanged event,
+    Emitter<KpiState> emit,
+  ) async {
+    _simulationMode = event.isEnabled;
+    final current = state;
+    if (current is! KpiLoaded) return;
+
+    emit(current.copyWith(metrics: const []));
+    if (!event.isEnabled && current.selectedNode != null) {
+      await _metricsSub?.cancel();
+      _subscribeToMetrics(current.selectedNode!.nodeId);
+    }
+  }
+
+  Future<void> _onSimulationMetricsUpdated(
+    KpiSimulationMetricsUpdated event,
+    Emitter<KpiState> emit,
+  ) async {
+    final current = state;
+    if (!_simulationMode ||
+        current is! KpiLoaded ||
+        current.selectedNode?.nodeId != event.nodeId) {
+      return;
+    }
+
+    final metrics = [...current.metrics, ...event.metrics];
+    emit(current.copyWith(
+      metrics: metrics.length > 750
+          ? metrics.sublist(metrics.length - 750)
+          : metrics,
+    ));
+  }
+
+  Future<void> _onStreamError(
+    KpiStreamError event,
+    Emitter<KpiState> emit,
+  ) async {
+    print('[KpiBloc] Stream error: ${event.message}');
+    emit(KpiError(event.message));
   }
 
   @override
@@ -114,10 +164,3 @@ class KpiBloc extends Bloc<KpiEvent, KpiState> {
     return super.close();
   }
 }
-Future<void> _onStreamError(
-    KpiStreamError event,
-    Emitter<KpiState> emit,
-  ) async {
-    print('[KpiBloc] Stream error: ${event.message}');
-    emit(KpiError(event.message));
-  }

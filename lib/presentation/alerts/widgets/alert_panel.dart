@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
@@ -11,134 +13,154 @@ import '../bloc/alert_state.dart';
 
 class AlertPanel extends StatelessWidget {
   final double? width;
+  final VoidCallback? onClose;
 
-  const AlertPanel({super.key, this.width = 340});
+  const AlertPanel({super.key, this.width = 340, this.onClose});
 
   @override
   Widget build(BuildContext context) {
-    const bgSurface = Color(0xFF111827);
     const borderColor = Color(0xFF1F2A3A);
 
-    return Container(
+    return SizedBox(
       width: width,
-      decoration: const BoxDecoration(
-        color: bgSurface,
-        border: Border(left: BorderSide(color: borderColor)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _header(context),
-          const Divider(height: 1, color: borderColor),
-          Expanded(
-            child: BlocConsumer<AlertBloc, AlertState>(
-              listener: (context, state) {
-                if (state is AlertActionSuccess) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Row(
-                        children: [
-                          const Icon(Icons.check_circle_outline,
-                              color: Color(0xFF22C55E), size: 18),
-                          const SizedBox(width: 8),
-                          Text(state.message),
-                        ],
-                      ),
-                      backgroundColor: const Color(0xFF1F2A3A),
-                      duration: const Duration(seconds: 2),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                } else if (state is AlertError) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(state.message),
-                      backgroundColor: const Color(0xFFEF4444),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
-              },
-              builder: (context, state) {
-                if (state is AlertLoading) {
-                  return const Center(
-                    child: CircularProgressIndicator(
-                      color: Color(0xFF00E5FF),
-                      strokeWidth: 2,
-                    ),
-                  );
-                }
-                if (state is AlertError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        state.message,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: Color(0xFFEF4444), fontSize: 12),
-                      ),
-                    ),
-                  );
-                }
-                if (state is AlertLoaded) {
-                  final alerts = state.filteredAlerts;
-                  if (alerts.isEmpty) {
-                    return const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.check_circle_outline_rounded,
-                              size: 40, color: Color(0xFF22C55E)),
-                          SizedBox(height: 8),
-                          Text(
-                            'No active alerts',
-                            style: TextStyle(
-                              color: Color(0xFF94A3B8),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xD9101827),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0x667E9BBF)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x66000000),
+                  blurRadius: 30,
+                  offset: Offset(0, 14),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _header(context),
+                const Divider(height: 1, color: borderColor),
+                Expanded(
+                  child: BlocConsumer<AlertBloc, AlertState>(
+                    listener: (context, state) {
+                      if (state is AlertActionSuccess) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Row(
+                              children: [
+                                const Icon(Icons.check_circle_outline,
+                                    color: Color(0xFF22C55E), size: 18),
+                                const SizedBox(width: 8),
+                                Text(state.message),
+                              ],
+                            ),
+                            backgroundColor: const Color(0xFF1F2A3A),
+                            duration: const Duration(seconds: 2),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      } else if (state is AlertError) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(state.message),
+                            backgroundColor: const Color(0xFFEF4444),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    },
+                    builder: (context, state) {
+                      if (state is AlertLoading) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF00E5FF),
+                            strokeWidth: 2,
+                          ),
+                        );
+                      }
+                      if (state is AlertError) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              state.message,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  color: Color(0xFFEF4444), fontSize: 12),
                             ),
                           ),
-                          SizedBox(height: 2),
-                          Text(
-                            'All network nodes operating nominally',
-                            style: TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 11,
+                        );
+                      }
+                      if (state is AlertLoaded) {
+                        final alerts = state.filteredAlerts;
+                        if (alerts.isEmpty) {
+                          return const Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check_circle_outline_rounded,
+                                    size: 40, color: Color(0xFF22C55E)),
+                                SizedBox(height: 8),
+                                Text(
+                                  'No active alerts',
+                                  style: TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'All network nodes operating nominally',
+                                  style: TextStyle(
+                                    color: Color(0xFF64748B),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                  return ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: alerts.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(height: 1, color: Color(0xFF1F2A3A)),
-                    itemBuilder: (context, index) => _AlertTile(
-                      alert: alerts[index],
-                      onAcknowledge: () {
-                        final authState = context.read<AuthBloc>().state;
-                        if (authState is AuthAuthenticated) {
-                          context.read<AlertBloc>().add(AlertAcknowledged(
-                                alertId: alerts[index].alertId,
-                                userId: authState.user.userId,
-                              ));
+                          );
                         }
-                      },
-                      onDismiss: () => _showDismissDialog(
-                        context,
-                        alerts[index].alertId,
-                      ),
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
+                        return ListView.separated(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: alerts.length,
+                          separatorBuilder: (_, __) => const Divider(
+                            height: 1,
+                            color: Color(0x332F4058),
+                          ),
+                          itemBuilder: (context, index) => _AlertTile(
+                            alert: alerts[index],
+                            onAcknowledge: () {
+                              final authState = context.read<AuthBloc>().state;
+                              if (authState is AuthAuthenticated) {
+                                context.read<AlertBloc>().add(
+                                      AlertAcknowledged(
+                                        alertId: alerts[index].alertId,
+                                        userId: authState.user.userId,
+                                      ),
+                                    );
+                              }
+                            },
+                            onDismiss: () => _showDismissDialog(
+                              context,
+                              alerts[index].alertId,
+                            ),
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -225,6 +247,17 @@ class AlertPanel extends StatelessWidget {
                   ),
                 ],
               ),
+              if (onClose != null)
+                IconButton(
+                  onPressed: onClose,
+                  tooltip: 'Close alerts',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: Color(0xFF94A3B8),
+                  ),
+                ),
             ],
           );
         },

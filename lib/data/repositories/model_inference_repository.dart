@@ -1,4 +1,5 @@
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/alert_model.dart';
 import '../models/kpi_metric_model.dart';
@@ -52,17 +53,38 @@ class ModelInferenceRepository {
   static const _sampleGroupingWindow = Duration(milliseconds: 750);
 
   FirebaseFunctions? _functions;
+  FirebaseAuth? _auth;
   String _modelVersion = 'unknown';
   double? _f1Score;
   double? _rmse;
 
-  ModelInferenceRepository({FirebaseFunctions? functions})
-      : _functions = functions;
+  ModelInferenceRepository({
+    FirebaseFunctions? functions,
+    FirebaseAuth? auth,
+  })  : _functions = functions,
+        _auth = auth;
+
+  FirebaseAuth get _firebaseAuth => _auth ??= FirebaseAuth.instance;
 
   FirebaseFunctions get _callables =>
-      _functions ??= FirebaseFunctions.instanceFor(region: 'us-central1');
+      _functions ??= FirebaseFunctions.instanceFor(
+        app: _firebaseAuth.app,
+        region: 'us-central1',
+      );
+
+  Future<void> _ensureAuthenticated({bool forceRefresh = false}) async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) {
+      throw StateError('Sign in to connect to the model service.');
+    }
+    final token = await user.getIdToken(forceRefresh);
+    if (token == null || token.isEmpty) {
+      throw StateError('Firebase could not provide an authentication token.');
+    }
+  }
 
   Future<ModelApiStatus> checkStatus() async {
+    await _ensureAuthenticated(forceRefresh: true);
     final result = await _callables.httpsCallable('model_status').call();
     final status = _asMap(result.data);
     final isOnline = status['online'] == true;
@@ -92,6 +114,7 @@ class ModelInferenceRepository {
         'Buffering KPI sequence (${window.sampleCount}/$windowSize samples).',
       );
     }
+    await _ensureAuthenticated();
     final result = await _callables.httpsCallable('predict_fault').call({
       'node_id': nodeId,
       'sequence': window.sequence,

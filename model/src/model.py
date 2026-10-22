@@ -72,15 +72,33 @@ def build_bilstm_model(
 
 def export_to_tflite(model: keras.Model, output_tflite_path: str):
     """
-    Exports trained Keras BiLSTM model to TensorFlow Lite for lightweight edge inference.
+    Exports a runtime-compatible TFLite model without Select TensorFlow ops.
     """
-    converter = tf.lite.TFLiteConverter.from_keras_model(model)
-    # Enable TF Select Ops in case bidirectional LSTM requires Flex delegate
-    converter.target_spec.supported_ops = [
-        tf.lite.OpsSet.TFLITE_BUILTINS,
-        tf.lite.OpsSet.SELECT_TF_OPS
-    ]
-    converter._experimental_lower_tensor_list_ops = False
+    inputs = layers.Input(shape=model.input_shape[1:], name="kpi_sequence_input")
+    x = inputs
+
+    for layer_name in ("bilstm_layer_1", "bilstm_layer_2"):
+        source_layer = model.get_layer(layer_name)
+        lstm_config = source_layer.forward_layer.get_config()
+        lstm_config["unroll"] = True
+        x = layers.Bidirectional(
+            layers.LSTM.from_config(lstm_config),
+            merge_mode=source_layer.merge_mode,
+            name=layer_name,
+        )(x)
+
+    x = layers.Dropout(
+        model.get_layer("dropout_regularization").rate,
+        name="dropout_regularization",
+    )(x)
+    outputs = layers.Dense.from_config(
+        model.get_layer("fault_probability_output").get_config()
+    )(x)
+    tflite_model = keras.Model(inputs, outputs, name=model.name)
+    tflite_model.set_weights(model.get_weights())
+
+    converter = tf.lite.TFLiteConverter.from_keras_model(tflite_model)
+    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
     tflite_model = converter.convert()
     
     os.makedirs(os.path.dirname(output_tflite_path), exist_ok=True)

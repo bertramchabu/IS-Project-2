@@ -1,8 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum MetricType { latency, jitter, packetLoss, retransmissionRate, signalStrength }
+enum MetricType {
+  latency,
+  jitter,
+  packetLoss,
+  retransmissionRate,
+  signalStrength
+}
 
-enum DataSource { simulated, api, fileUpload }
+enum DataSource { simulated, csvReplay, api, fileUpload }
 
 enum DataQuality { good, fair, poor }
 
@@ -37,9 +43,8 @@ class KpiMetricModel {
       unit: d['unit'] as String? ?? '',
       timestamp: (d['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
       source: _parseSource(d['source'] as String?),
-      quality: d['quality'] != null
-          ? _parseQuality(d['quality'] as String?)
-          : null,
+      quality:
+          d['quality'] != null ? _parseQuality(d['quality'] as String?) : null,
     );
   }
 
@@ -62,6 +67,8 @@ class KpiMetricModel {
 
   static DataSource _parseSource(String? v) {
     switch (v) {
+      case 'CSVReplay':
+        return DataSource.csvReplay;
       case 'API':
         return DataSource.api;
       case 'FileUpload':
