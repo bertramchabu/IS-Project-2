@@ -30,9 +30,7 @@ class AlertBloc extends Bloc<AlertEvent, AlertState> {
     AlertsStarted event,
     Emitter<AlertState> emit,
   ) async {
-    _sub = _repo
-        .watchAlerts(statusFilter: _currentFilter)
-        .listen(
+    _sub = _repo.watchAlerts(statusFilter: _currentFilter).listen(
           (alerts) => add(AlertsReceived(alerts)),
           onError: (e) => add(AlertStreamError(e.toString())),
         );
@@ -61,7 +59,11 @@ class AlertBloc extends Bloc<AlertEvent, AlertState> {
     Emitter<AlertState> emit,
   ) async {
     try {
-      await _repo.acknowledgeAlert(event.alertId, event.userId);
+      await _repo.acknowledgeAlert(
+        event.nodeId,
+        event.alertId,
+        event.userId,
+      );
       final current = state;
       if (current is AlertLoaded) {
         emit(AlertActionSuccess(
@@ -82,6 +84,7 @@ class AlertBloc extends Bloc<AlertEvent, AlertState> {
   ) async {
     try {
       await _repo.dismissAlert(
+        event.nodeId,
         event.alertId,
         event.userId,
         event.reason,
@@ -106,6 +109,7 @@ class AlertBloc extends Bloc<AlertEvent, AlertState> {
     return super.close();
   }
 }
+
 Future<void> _onStreamError(
   AlertStreamError event,
   Emitter<AlertState> emit,

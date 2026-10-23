@@ -11,6 +11,7 @@ class PredictionModel {
   final int? inferenceTimeMs;
   final bool adaptiveReductionApplied;
   final DateTime predictionTimestamp;
+  final DateTime? inputTimestamp;
   final String triggeredBy;
   final String? operationalStatus;
   final String? message;
@@ -29,6 +30,7 @@ class PredictionModel {
     this.inferenceTimeMs,
     required this.adaptiveReductionApplied,
     required this.predictionTimestamp,
+    this.inputTimestamp,
     required this.triggeredBy,
     this.operationalStatus,
     this.message,
@@ -55,10 +57,10 @@ class PredictionModel {
               .toList() ??
           const [],
       inferenceTimeMs: (d['inferenceTimeMs'] as num?)?.toInt() ?? 12,
-      adaptiveReductionApplied:
-          d['adaptiveReductionApplied'] as bool? ?? false,
+      adaptiveReductionApplied: d['adaptiveReductionApplied'] as bool? ?? false,
       predictionTimestamp:
           (d['predictionTimestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      inputTimestamp: (d['inputTimestamp'] as Timestamp?)?.toDate(),
       triggeredBy: d['triggeredBy'] as String? ?? 'BiLSTM Inference',
       operationalStatus: d['status'] as String?,
       message: d['message'] as String?,

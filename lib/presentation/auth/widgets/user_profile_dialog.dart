@@ -6,6 +6,7 @@ import '../../../data/models/user_models.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
+import '../../widgets/glass_ui.dart';
 
 class UserProfileDialog extends StatefulWidget {
   final UserModel user;
@@ -126,343 +127,341 @@ class _UserProfileDialogState extends State<UserProfileDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      child: Container(
+      child: SizedBox(
         width: 520,
-        decoration: BoxDecoration(
-          color: bgSurface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: borderColor),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.5),
-              blurRadius: 24,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Modal Header
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: borderColor)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [accentColor, Color(0xFF7C3AED)],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(
-                        initials,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+        child: GlassSurface(
+          radius: 20,
+          tint: bgSurface,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Modal Header
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: borderColor)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [accentColor, Color(0xFF7C3AED)],
                         ),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.user.username,
+                      child: Center(
+                        child: Text(
+                          initials,
                           style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: textPrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: accentColor.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                    color: accentColor.withOpacity(0.3)),
-                              ),
-                              child: Text(
-                                widget.user.role.displayName,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: accentColor,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              widget.user.email,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: textMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, color: textMuted),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-
-            // Form Body
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Username field
-                      const Text(
-                        'Full Name / Username',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: textMuted,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _usernameController,
-                        style: const TextStyle(color: textPrimary, fontSize: 13),
-                        decoration: _inputDecoration('e.g. John Doe', Icons.person_outline),
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Username is required';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Department & Phone Row
-                      Row(
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Department',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: textMuted,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _departmentController,
-                                  style: const TextStyle(
-                                      color: textPrimary, fontSize: 13),
-                                  decoration: _inputDecoration(
-                                      'e.g. NOC Infrastructure',
-                                      Icons.business_outlined),
-                                ),
-                              ],
+                          Text(
+                            widget.user.username,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: textPrimary,
                             ),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Phone Number',
-                                  style: TextStyle(
-                                    fontSize: 12,
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: accentColor.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                      color: accentColor.withOpacity(0.3)),
+                                ),
+                                child: Text(
+                                  widget.user.role.displayName,
+                                  style: const TextStyle(
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w600,
-                                    color: textMuted,
+                                    color: accentColor,
                                   ),
                                 ),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _phoneController,
-                                  style: const TextStyle(
-                                      color: textPrimary, fontSize: 13),
-                                  decoration: _inputDecoration(
-                                      '+254 700 000 000',
-                                      Icons.phone_outlined),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                widget.user.email,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: textMuted,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 18),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: textMuted),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
 
-                      // Security / MFA Card
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: bgSurfaceAlt,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: borderColor),
+              // Form Body
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Username field
+                        const Text(
+                          'Full Name / Username',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: textMuted,
+                          ),
                         ),
-                        child: Row(
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          controller: _usernameController,
+                          style:
+                              const TextStyle(color: textPrimary, fontSize: 13),
+                          decoration: _inputDecoration(
+                              'e.g. John Doe', Icons.person_outline),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) {
+                              return 'Username is required';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Department & Phone Row
+                        Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: _mfaEnabled
-                                    ? const Color(0xFF22C55E).withOpacity(0.12)
-                                    : Colors.orange.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                _mfaEnabled
-                                    ? Icons.security_rounded
-                                    : Icons.gpp_maybe_outlined,
-                                color: _mfaEnabled
-                                    ? const Color(0xFF22C55E)
-                                    : Colors.orange,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    'Multi-Factor Authentication (MFA)',
+                                    'Department',
                                     style: TextStyle(
-                                      fontSize: 13,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.w600,
-                                      color: textPrimary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _mfaEnabled
-                                        ? 'Enhanced 2FA protection active'
-                                        : 'Recommended for elevated privileges',
-                                    style: const TextStyle(
-                                      fontSize: 11,
                                       color: textMuted,
                                     ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  TextFormField(
+                                    controller: _departmentController,
+                                    style: const TextStyle(
+                                        color: textPrimary, fontSize: 13),
+                                    decoration: _inputDecoration(
+                                        'e.g. NOC Infrastructure',
+                                        Icons.business_outlined),
                                   ),
                                 ],
                               ),
                             ),
-                            Switch(
-                              value: _mfaEnabled,
-                              activeColor: accentColor,
-                              onChanged: (val) {
-                                setState(() => _mfaEnabled = val);
-                              },
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Phone Number',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: textMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  TextFormField(
+                                    controller: _phoneController,
+                                    style: const TextStyle(
+                                        color: textPrimary, fontSize: 13),
+                                    decoration: _inputDecoration(
+                                        '+254 700 000 000',
+                                        Icons.phone_outlined),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 18),
+                        const SizedBox(height: 18),
 
-                      // Account metadata
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: bgSurfaceAlt.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: borderColor.withOpacity(0.6)),
+                        // Security / MFA Card
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: bgSurfaceAlt,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: borderColor),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: _mfaEnabled
+                                      ? const Color(0xFF22C55E)
+                                          .withOpacity(0.12)
+                                      : Colors.orange.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  _mfaEnabled
+                                      ? Icons.security_rounded
+                                      : Icons.gpp_maybe_outlined,
+                                  color: _mfaEnabled
+                                      ? const Color(0xFF22C55E)
+                                      : Colors.orange,
+                                  size: 22,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Multi-Factor Authentication (MFA)',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _mfaEnabled
+                                          ? 'Enhanced 2FA protection active'
+                                          : 'Recommended for elevated privileges',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: textMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Switch(
+                                value: _mfaEnabled,
+                                activeColor: accentColor,
+                                onChanged: (val) {
+                                  setState(() => _mfaEnabled = val);
+                                },
+                              ),
+                            ],
+                          ),
                         ),
-                        child: Column(
-                          children: [
-                            _metaRow(
-                                'User ID', widget.user.userId, textMuted, textPrimary),
-                            const Divider(height: 12, color: borderColor),
-                            _metaRow(
-                                'Member Since',
-                                dateFormat.format(widget.user.createdAt),
-                                textMuted,
-                                textPrimary),
-                            if (widget.user.lastLogin != null) ...[
+                        const SizedBox(height: 18),
+
+                        // Account metadata
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: bgSurfaceAlt.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(8),
+                            border:
+                                Border.all(color: borderColor.withOpacity(0.6)),
+                          ),
+                          child: Column(
+                            children: [
+                              _metaRow('User ID', widget.user.userId, textMuted,
+                                  textPrimary),
                               const Divider(height: 12, color: borderColor),
                               _metaRow(
-                                  'Last Login',
-                                  dateFormat.format(widget.user.lastLogin!),
+                                  'Member Since',
+                                  dateFormat.format(widget.user.createdAt),
                                   textMuted,
                                   textPrimary),
+                              if (widget.user.lastLogin != null) ...[
+                                const Divider(height: 12, color: borderColor),
+                                _metaRow(
+                                    'Last Login',
+                                    dateFormat.format(widget.user.lastLogin!),
+                                    textMuted,
+                                    textPrimary),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            // Modal Actions
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: borderColor)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed:
-                        _isSaving ? null : () => Navigator.of(context).pop(),
-                    style: TextButton.styleFrom(
-                      foregroundColor: textMuted,
-                    ),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 10),
-                  ElevatedButton(
-                    onPressed: _isSaving ? null : _handleSave,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: accentColor,
-                      foregroundColor: const Color(0xFF0A0E17),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+              // Modal Actions
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: borderColor)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed:
+                          _isSaving ? null : () => Navigator.of(context).pop(),
+                      style: TextButton.styleFrom(
+                        foregroundColor: textMuted,
                       ),
+                      child: const Text('Cancel'),
                     ),
-                    child: _isSaving
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Color(0xFF0A0E17),
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      onPressed: _isSaving ? null : _handleSave,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: accentColor,
+                        foregroundColor: const Color(0xFF0A0E17),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF0A0E17),
+                              ),
+                            )
+                          : const Text(
+                              'Save Profile',
+                              style: TextStyle(fontWeight: FontWeight.w700),
                             ),
-                          )
-                        : const Text(
-                            'Save Profile',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

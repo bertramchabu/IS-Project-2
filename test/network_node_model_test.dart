@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:netvision_ai/data/models/network_node_model.dart';
 
@@ -19,6 +20,27 @@ NetworkNodeModel _node({double? latitude, double? longitude}) {
 }
 
 void main() {
+  test('reads coordinates stored as separate numeric fields', () {
+    final node = NetworkNodeModel.fromMap('node-1', {
+      'latitude': -1.2921,
+      'longitude': 36.8219,
+    });
+
+    expect(node.latitude, -1.2921);
+    expect(node.longitude, 36.8219);
+    expect(node.hasLocation, isTrue);
+  });
+
+  test('reads coordinates stored as a Firestore GeoPoint', () {
+    final node = NetworkNodeModel.fromMap('node-1', {
+      'location': const GeoPoint(-1.2921, 36.8219),
+    });
+
+    expect(node.latitude, -1.2921);
+    expect(node.longitude, 36.8219);
+    expect(node.hasLocation, isTrue);
+  });
+
   test('accepts valid geographic coordinates', () {
     expect(_node(latitude: -90, longitude: 180).hasLocation, isTrue);
     expect(_node(latitude: 0, longitude: 0).hasLocation, isTrue);

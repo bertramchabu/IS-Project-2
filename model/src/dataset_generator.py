@@ -1,7 +1,4 @@
 """
-dataset_generator.py - Multivariate Network KPI Time Series Simulation
-Project: NetVision AI (Strathmore University)
-Author: Bertram Chabu (166458, BBIT 4C)
 
 Simulates 5 mandatory network KPIs:
 1. Latency (ms)

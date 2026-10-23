@@ -1,8 +1,4 @@
 """
-baseline_comparator.py - Comparative Evaluation: NetVision AI vs Baseline Threshold-Based Monitoring
-Project: NetVision AI (Strathmore University)
-Author: Bertram Chabu (166458, BBIT 4C)
-
 Fulfills Specific Objective iv & Phase 5 Comparative Evaluation:
 - Compares NetVision AI BiLSTM against conventional static threshold-based monitoring
 - Metrics compared:

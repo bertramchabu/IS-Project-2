@@ -15,11 +15,12 @@ flutter run
 Firebase must be configured for the target platform. The dashboard provides
 role-specific views for network administrators, ICT managers, and system
 administrators. Network-node records and KPI documents are read from Firestore.
-The topology view uses the Google Maps Flutter plugin. For Android, set
-`googleMapsApiKey` in the ignored `android/local.properties` file or provide the
-`GOOGLE_MAPS_API_KEY` environment variable; enable and restrict the Google Maps
-SDK key for Android. The web Maps JavaScript API key is configured in
-`web/index.html` and should be restricted to the deployed web origins.
+The topology view uses `google_maps_flutter` on web and Android. For Android,
+set `googleMapsApiKey` in the ignored `android/local.properties` file or provide
+the `GOOGLE_MAPS_API_KEY` environment variable, and enable the Maps SDK for
+Android for that key. The web Maps JavaScript API key is configured in
+`web/index.html`; enable the Maps JavaScript API and restrict the key to the
+deployed web origins.
 
 ## Replay location telemetry in live charts
 

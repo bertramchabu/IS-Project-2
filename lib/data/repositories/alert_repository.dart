@@ -31,17 +31,16 @@ class AlertRepository {
 
       // Fetch node names in parallel (small number of unique nodes).
       final nodeIds = snap.docs
-          .map((d) => (d.data() as Map<String, dynamic>)['nodeId'] as String? ?? '')
+          .map((d) =>
+              (d.data() as Map<String, dynamic>)['nodeId'] as String? ?? '')
           .where((id) => id.isNotEmpty)
           .toSet()
           .toList();
 
       final nodeNames = <String, String>{};
       for (final nodeId in nodeIds) {
-        final nodeDoc = await _firestore
-            .collection('networkNodes')
-            .doc(nodeId)
-            .get();
+        final nodeDoc =
+            await _firestore.collection('networkNodes').doc(nodeId).get();
         if (nodeDoc.exists) {
           nodeNames[nodeId] =
               (nodeDoc.data() as Map<String, dynamic>)['nodeName'] as String? ??
@@ -60,8 +59,7 @@ class AlertRepository {
   }
 
   /// Stream alerts for a specific node.
-  Stream<List<AlertModel>> watchAlertsForNode(String nodeId,
-      {int limit = 50}) {
+  Stream<List<AlertModel>> watchAlertsForNode(String nodeId, {int limit = 50}) {
     return _firestore
         .collection('networkNodes')
         .doc(nodeId)
@@ -69,19 +67,17 @@ class AlertRepository {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => AlertModel.fromFirestore(doc))
-            .toList());
+        .map((snap) =>
+            snap.docs.map((doc) => AlertModel.fromFirestore(doc)).toList());
   }
 
   /// Acknowledge an alert (Network Administrator only).
-  Future<void> acknowledgeAlert(String alertId, String userId) async {
-    final alertRef = await _findAlertRef(alertId);
-    if (alertRef == null) {
-      throw Exception('Alert not found: $alertId');
-    }
-
-    await alertRef.update({
+  Future<void> acknowledgeAlert(
+    String nodeId,
+    String alertId,
+    String userId,
+  ) async {
+    await _alertRef(nodeId, alertId).update({
       'status': 'Acknowledged',
       'acknowledgedBy': userId,
       'acknowledgedAt': FieldValue.serverTimestamp(),
@@ -90,16 +86,12 @@ class AlertRepository {
 
   /// Dismiss an alert with a required reason.
   Future<void> dismissAlert(
+    String nodeId,
     String alertId,
     String userId,
     String reason,
   ) async {
-    final alertRef = await _findAlertRef(alertId);
-    if (alertRef == null) {
-      throw Exception('Alert not found: $alertId');
-    }
-
-    await alertRef.update({
+    await _alertRef(nodeId, alertId).update({
       'status': 'Dismissed',
       'acknowledgedBy': userId,
       'dismissalReason': reason,
@@ -108,30 +100,22 @@ class AlertRepository {
   }
 
   /// Resolve an alert.
-  Future<void> resolveAlert(String alertId) async {
-    final alertRef = await _findAlertRef(alertId);
-    if (alertRef == null) {
-      throw Exception('Alert not found: $alertId');
-    }
-
-    await alertRef.update({
+  Future<void> resolveAlert(String nodeId, String alertId) async {
+    await _alertRef(nodeId, alertId).update({
       'status': 'Resolved',
       'resolvedAt': FieldValue.serverTimestamp(),
     });
   }
 
-  /// Find the Firestore reference for an alert by its ID.
-  /// Alerts live under networkNodes/{nodeId}/alerts/{alertId} — we use a
-  /// collection group query to locate the document.
-  Future<DocumentReference?> _findAlertRef(String alertId) async {
-    final snap = await _firestore
-        .collectionGroup('alerts')
-        .where(FieldPath.documentId, isEqualTo: alertId)
-        .limit(1)
-        .get();
-
-    if (snap.docs.isEmpty) return null;
-    return snap.docs.first.reference;
+  DocumentReference<Map<String, dynamic>> _alertRef(
+    String nodeId,
+    String alertId,
+  ) {
+    return _firestore
+        .collection('networkNodes')
+        .doc(nodeId)
+        .collection('alerts')
+        .doc(alertId);
   }
 
   String _statusId(AlertStatus status) {

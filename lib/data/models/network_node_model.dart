@@ -38,15 +38,22 @@ class NetworkNodeModel {
   });
 
   factory NetworkNodeModel.fromFirestore(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>;
-    final geo = d['location'] as GeoPoint?;
+    return NetworkNodeModel.fromMap(
+      doc.id,
+      doc.data() as Map<String, dynamic>,
+    );
+  }
+
+  factory NetworkNodeModel.fromMap(String nodeId, Map<String, dynamic> d) {
+    final location = d['location'];
+    final geo = location is GeoPoint ? location : null;
 
     return NetworkNodeModel(
-      nodeId: doc.id,
+      nodeId: nodeId,
       nodeName: d['nodeName'] as String? ?? '',
       ipAddress: d['ipAddress'] as String? ?? '',
-      latitude: geo?.latitude,
-      longitude: geo?.longitude,
+      latitude: geo?.latitude ?? (d['latitude'] as num?)?.toDouble(),
+      longitude: geo?.longitude ?? (d['longitude'] as num?)?.toDouble(),
       nodeType: _parseNodeType(d['nodeType'] as String?),
       status: _parseNodeStatus(d['status'] as String?),
       region: d['region'] as String?,

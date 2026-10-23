@@ -7,13 +7,14 @@ import '../../auth/bloc/auth_bloc.dart';
 import '../../auth/bloc/auth_event.dart';
 import '../../auth/bloc/auth_state.dart';
 import '../../auth/widgets/user_profile_dialog.dart';
+import '../../widgets/glass_ui.dart';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 class _AdminColors {
   static const bg = Color(0xFF0A0E17);
-  static const surface = Color(0xFF111827);
-  static const surfaceAlt = Color(0xFF1A2332);
-  static const border = Color(0xFF1F2A3A);
+  static const surface = Color(0xB3111827);
+  static const surfaceAlt = Color(0xAA1A2332);
+  static const border = Color(0x526A7D98);
   static const accent = Color(0xFF00E5FF);
   static const violet = Color(0xFF7C3AED);
   static const healthy = Color(0xFF22C55E);
@@ -58,7 +59,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
     return Scaffold(
       backgroundColor: _AdminColors.bg,
       appBar: _buildAppBar(context, user, username, initials),
-      body: LayoutBuilder(
+      body: GlassBackground(
+      child: LayoutBuilder(
         builder: (context, constraints) {
           final content = Expanded(
             child: SingleChildScrollView(
@@ -84,7 +86,10 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                         value: 0,
                         child: Text('User Management'),
                       ),
-                      DropdownMenuItem(value: 1, child: Text('Network Nodes')),
+                      DropdownMenuItem(
+                        value: 1,
+                        child: Text('Network Nodes'),
+                      ),
                       DropdownMenuItem(
                         value: 2,
                         child: Text('Thresholds & Adaptive'),
@@ -120,6 +125,7 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
           );
         },
       ),
+      ),
     );
   }
 
@@ -128,7 +134,7 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
     final compact = MediaQuery.sizeOf(context).width < 600;
     return AppBar(
       elevation: 0,
-      backgroundColor: _AdminColors.surface,
+      backgroundColor: const Color(0xCC111827),
       surfaceTintColor: Colors.transparent,
       shape: const Border(
         bottom: BorderSide(color: _AdminColors.border, width: 1),
@@ -273,65 +279,68 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
       },
     ];
 
-    return Container(
-      width: 250,
-      color: _AdminColors.surface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-            child: Text(
-              'ADMINISTRATION',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.4,
-                color: _AdminColors.textMuted,
+    return GlassSurface(
+      radius: 0,
+      tint: _AdminColors.surface,
+      child: SizedBox(
+        width: 250,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 20, 16, 12),
+              child: Text(
+                'ADMINISTRATION',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.4,
+                  color: _AdminColors.textMuted,
+                ),
               ),
             ),
-          ),
-          ...List.generate(navItems.length, (idx) {
-            final item = navItems[idx];
-            final selected = _selectedTabIndex == idx;
-            return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-              decoration: BoxDecoration(
-                color: selected
-                    ? _AdminColors.accent.withOpacity(0.08)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
+            ...List.generate(navItems.length, (idx) {
+              final item = navItems[idx];
+              final selected = _selectedTabIndex == idx;
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                decoration: BoxDecoration(
                   color: selected
-                      ? _AdminColors.accent.withOpacity(0.35)
+                      ? _AdminColors.accent.withOpacity(0.08)
                       : Colors.transparent,
-                ),
-              ),
-              child: ListTile(
-                dense: true,
-                selected: selected,
-                leading: Icon(
-                  item['icon'] as IconData,
-                  size: 18,
-                  color: selected
-                      ? _AdminColors.accent
-                      : _AdminColors.textSecondary,
-                ),
-                title: Text(
-                  item['title'] as String,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
                     color: selected
-                        ? _AdminColors.accent
-                        : _AdminColors.textPrimary,
+                        ? _AdminColors.accent.withOpacity(0.35)
+                        : Colors.transparent,
                   ),
                 ),
-                onTap: () => setState(() => _selectedTabIndex = idx),
-              ),
-            );
-          }),
-        ],
+                child: ListTile(
+                  dense: true,
+                  selected: selected,
+                  leading: Icon(
+                    item['icon'] as IconData,
+                    size: 18,
+                    color: selected
+                        ? _AdminColors.accent
+                        : _AdminColors.textSecondary,
+                  ),
+                  title: Text(
+                    item['title'] as String,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      color: selected
+                          ? _AdminColors.accent
+                          : _AdminColors.textPrimary,
+                    ),
+                  ),
+                  onTap: () => setState(() => _selectedTabIndex = idx),
+                ),
+              );
+            }),
+          ],
+        ),
       ),
     );
   }
@@ -396,12 +405,9 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
             }
 
             final docs = snapshot.data!.docs;
-            return Container(
-              decoration: BoxDecoration(
-                color: _AdminColors.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _AdminColors.border),
-              ),
+            return GlassSurface(
+              radius: 14,
+              tint: _AdminColors.surface,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
                 child: SingleChildScrollView(
@@ -838,12 +844,9 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
             }
 
             final docs = snapshot.data!.docs;
-            return Container(
-              decoration: BoxDecoration(
-                color: _AdminColors.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _AdminColors.border),
-              ),
+            return GlassSurface(
+              radius: 14,
+              tint: _AdminColors.surface,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
                 child: SingleChildScrollView(
@@ -1597,13 +1600,9 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
 
   Widget _healthCard(
       String service, String status, IconData icon, Color color) {
-    return Container(
+    return GlassSurface(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _AdminColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _AdminColors.border),
-      ),
+      radius: 12,
       child: Row(
         children: [
           Container(

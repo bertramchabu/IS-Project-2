@@ -25,29 +25,36 @@ class AlertStatusFilterChanged extends AlertEvent {
 
 /// Acknowledge an alert.
 class AlertAcknowledged extends AlertEvent {
+  final String nodeId;
   final String alertId;
   final String userId;
 
-  const AlertAcknowledged({required this.alertId, required this.userId});
+  const AlertAcknowledged({
+    required this.nodeId,
+    required this.alertId,
+    required this.userId,
+  });
 
   @override
-  List<Object?> get props => [alertId, userId];
+  List<Object?> get props => [nodeId, alertId, userId];
 }
 
 /// Dismiss an alert with a reason.
 class AlertDismissed extends AlertEvent {
+  final String nodeId;
   final String alertId;
   final String userId;
   final String reason;
 
   const AlertDismissed({
+    required this.nodeId,
     required this.alertId,
     required this.userId,
     required this.reason,
   });
 
   @override
-  List<Object?> get props => [alertId, userId, reason];
+  List<Object?> get props => [nodeId, alertId, userId, reason];
 }
 
 /// Internal event fired when the Firestore stream emits.
@@ -59,6 +66,7 @@ class AlertsReceived extends AlertEvent {
   @override
   List<Object?> get props => [alerts];
 }
+
 class AlertStreamError extends AlertEvent {
   final String message;
   const AlertStreamError(this.message);

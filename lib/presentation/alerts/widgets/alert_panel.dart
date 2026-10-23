@@ -1,5 +1,3 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
@@ -10,6 +8,7 @@ import '../../auth/bloc/auth_state.dart';
 import '../bloc/alert_bloc.dart';
 import '../bloc/alert_event.dart';
 import '../bloc/alert_state.dart';
+import '../../widgets/web_safe_backdrop_blur.dart';
 
 class AlertPanel extends StatelessWidget {
   final double? width;
@@ -25,8 +24,8 @@ class AlertPanel extends StatelessWidget {
       width: width,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+        child: WebSafeBackdropBlur(
+          sigma: 22,
           child: Container(
             decoration: BoxDecoration(
               color: const Color(0xD9101827),
@@ -140,6 +139,7 @@ class AlertPanel extends StatelessWidget {
                               if (authState is AuthAuthenticated) {
                                 context.read<AlertBloc>().add(
                                       AlertAcknowledged(
+                                        nodeId: alerts[index].nodeId,
                                         alertId: alerts[index].alertId,
                                         userId: authState.user.userId,
                                       ),
@@ -148,6 +148,7 @@ class AlertPanel extends StatelessWidget {
                             },
                             onDismiss: () => _showDismissDialog(
                               context,
+                              alerts[index].nodeId,
                               alerts[index].alertId,
                             ),
                           ),
@@ -265,7 +266,11 @@ class AlertPanel extends StatelessWidget {
     );
   }
 
-  void _showDismissDialog(BuildContext context, String alertId) {
+  void _showDismissDialog(
+    BuildContext context,
+    String nodeId,
+    String alertId,
+  ) {
     final controller = TextEditingController();
     showDialog<void>(
       context: context,
@@ -321,6 +326,7 @@ class AlertPanel extends StatelessWidget {
                 final authState = context.read<AuthBloc>().state;
                 if (authState is AuthAuthenticated) {
                   context.read<AlertBloc>().add(AlertDismissed(
+                        nodeId: nodeId,
                         alertId: alertId,
                         userId: authState.user.userId,
                         reason: reason,

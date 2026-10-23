@@ -1,7 +1,4 @@
 """
-evaluate.py - Model Evaluation & Performance Validation
-Project: NetVision AI (Strathmore University)
-Author: Bertram Chabu (166458, BBIT 4C)
 
 Fulfills Phase 5 / Specific Objective ii & iv:
 - Computes F1-score (Target: >= 0.85)

@@ -147,6 +147,7 @@ class ModelInferenceRepository {
           _optionalDouble(prediction['inference_latency_ms'])?.round(),
       adaptiveReductionApplied: false,
       predictionTimestamp: predictionTimestamp,
+      inputTimestamp: window.timestamp,
       triggeredBy: 'Firebase BiLSTM Function',
       operationalStatus: prediction['status'] as String?,
       message: prediction['message'] as String?,

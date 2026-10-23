@@ -14,13 +14,13 @@ import '../../auth/bloc/auth_bloc.dart';
 import '../../auth/bloc/auth_event.dart';
 import '../../auth/bloc/auth_state.dart';
 import '../../auth/widgets/user_profile_dialog.dart';
+import '../../widgets/glass_ui.dart';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 class _ICTColors {
   static const bg = Color(0xFF0A0E17);
-  static const surface = Color(0xFF111827);
-  static const surfaceAlt = Color(0xFF1A2332);
-  static const border = Color(0xFF1F2A3A);
+  static const surfaceAlt = Color(0xAA1A2332);
+  static const border = Color(0x526A7D98);
   static const accent = Color(0xFF00E5FF);
   static const purple = Color(0xFFA78BFA);
   static const healthy = Color(0xFF22C55E);
@@ -84,8 +84,7 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
   Future<void> _exportPdfReport(UserModel? user) async {
     setState(() => _isExporting = true);
     try {
-      final nodesSnapshot =
-          await _firestore.collection('networkNodes').get();
+      final nodesSnapshot = await _firestore.collection('networkNodes').get();
       final activeNodeCount = nodesSnapshot.docs
           .where((doc) => doc.data()['isActive'] as bool? ?? true)
           .length;
@@ -93,7 +92,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
       try {
         modelStatus = await _modelRepository.checkStatus();
       } catch (error) {
-        print('[ICTManagerHome] Could not include model status in report: $error');
+        print(
+            '[ICTManagerHome] Could not include model status in report: $error');
       }
       final modelReady =
           modelStatus?.isOnline == true && modelStatus?.isModelLoaded == true;
@@ -350,49 +350,51 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
     return Scaffold(
       backgroundColor: _ICTColors.bg,
       appBar: _buildAppBar(context, user, username, initials),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top Section Header
-            _buildSectionTitle(
-              'Executive Network Intelligence',
-              'Aggregate infrastructure performance, predictive reliability & reporting',
-            ),
-            const SizedBox(height: 18),
+      body: GlassBackground(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Section Header
+              _buildSectionTitle(
+                'Executive Network Intelligence',
+                'Aggregate infrastructure performance, predictive reliability & reporting',
+              ),
+              const SizedBox(height: 18),
 
-            // Top Aggregate Stats Cards Grid
-            _buildMetricsGrid(),
-            const SizedBox(height: 24),
+              // Top Aggregate Stats Cards Grid
+              _buildMetricsGrid(),
+              const SizedBox(height: 24),
 
-            // Middle Row: AI Model Performance & Alert Volume Trends
-            LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth < 900) {
-                  return Column(
+              // Middle Row: AI Model Performance & Alert Volume Trends
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 900) {
+                    return Column(
+                      children: [
+                        _buildModelPerformanceCard(),
+                        const SizedBox(height: 18),
+                        _buildAlertTrendsCard(),
+                      ],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildModelPerformanceCard(),
-                      const SizedBox(height: 18),
-                      _buildAlertTrendsCard(),
+                      Expanded(flex: 5, child: _buildModelPerformanceCard()),
+                      const SizedBox(width: 18),
+                      Expanded(flex: 6, child: _buildAlertTrendsCard()),
                     ],
                   );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 5, child: _buildModelPerformanceCard()),
-                    const SizedBox(width: 18),
-                    Expanded(flex: 6, child: _buildAlertTrendsCard()),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 24),
+                },
+              ),
+              const SizedBox(height: 24),
 
-            // Bottom Section: Executive Summary Report Generator
-            _buildReportGeneratorCard(user),
-          ],
+              // Bottom Section: Executive Summary Report Generator
+              _buildReportGeneratorCard(user),
+            ],
+          ),
         ),
       ),
     );
@@ -403,7 +405,7 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
     final compact = MediaQuery.sizeOf(context).width < 600;
     return AppBar(
       elevation: 0,
-      backgroundColor: _ICTColors.surface,
+      backgroundColor: Color(0xCC111827),
       surfaceTintColor: Colors.transparent,
       shape: const Border(
         bottom: BorderSide(color: _ICTColors.border, width: 1),
@@ -438,44 +440,45 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
               ),
               if (!compact)
                 const Text(
-                'ICT Management & Executive Intelligence',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w400,
-                  color: _ICTColors.textMuted,
-                  letterSpacing: 0.4,
+                  'ICT Management & Executive Intelligence',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w400,
+                    color: _ICTColors.textMuted,
+                    letterSpacing: 0.4,
+                  ),
                 ),
-              ),
             ],
           ),
         ],
       ),
       actions: [
         // Role pill
-        if (!compact) Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: _ICTColors.purple.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _ICTColors.purple.withOpacity(0.3)),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.shield_outlined, size: 14, color: _ICTColors.purple),
-              SizedBox(width: 6),
-              Text(
-                'ICT MANAGER',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  color: _ICTColors.purple,
-                  letterSpacing: 0.8,
+        if (!compact)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: _ICTColors.purple.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: _ICTColors.purple.withOpacity(0.3)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.shield_outlined, size: 14, color: _ICTColors.purple),
+                SizedBox(width: 6),
+                Text(
+                  'ICT MANAGER',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: _ICTColors.purple,
+                    letterSpacing: 0.8,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         if (!compact) const SizedBox(width: 12),
         // User Profile Clickable Chip
         InkWell(
@@ -582,7 +585,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
       stream: _firestore.collection('networkNodes').snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          print('[ICTManagerHome] Node summary stream error: ${snapshot.error}');
+          print(
+              '[ICTManagerHome] Node summary stream error: ${snapshot.error}');
           return _dashboardDataError('Unable to load network node status.');
         }
         if (!snapshot.hasData) {
@@ -644,8 +648,7 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                 : constraints.maxWidth >= 560
                     ? 2
                     : 1;
-            final width =
-                (constraints.maxWidth - 16 * (columns - 1)) / columns;
+            final width = (constraints.maxWidth - 16 * (columns - 1)) / columns;
             return Wrap(
               spacing: 16,
               runSpacing: 16,
@@ -675,7 +678,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: _ICTColors.critical.withOpacity(0.3)),
         ),
-        child: Text(message, style: const TextStyle(color: _ICTColors.critical)),
+        child:
+            Text(message, style: const TextStyle(color: _ICTColors.critical)),
       );
 
   Widget _buildStatCard({
@@ -686,82 +690,69 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
     required Color color,
     required double width,
   }) {
-    return Container(
+    return SizedBox(
       width: width,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: _ICTColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _ICTColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.1,
-                    color: _ICTColors.textMuted,
+      child: GlassSurface(
+        padding: const EdgeInsets.all(18),
+        radius: 14,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.1,
+                      color: _ICTColors.textMuted,
+                    ),
                   ),
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 16, color: color),
                 ),
-                child: Icon(icon, size: 16, color: color),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: _ICTColors.textPrimary,
+                letterSpacing: -0.5,
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: _ICTColors.textPrimary,
-              letterSpacing: -0.5,
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 11,
-              color: color,
-              fontWeight: FontWeight.w500,
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 11,
+                color: color,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildModelPerformanceCard() {
-    return Container(
+    return GlassSurface(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _ICTColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _ICTColors.border),
-      ),
+      radius: 14,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -915,13 +906,9 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
   }
 
   Widget _buildAlertTrendsCard() {
-    return Container(
+    return GlassSurface(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _ICTColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _ICTColors.border),
-      ),
+      radius: 14,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -958,7 +945,6 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
             ],
           ),
           const SizedBox(height: 18),
-
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _firestore
                 .collectionGroup('alerts')
@@ -967,7 +953,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                print('[ICTManagerHome] Alert trend stream error: ${snapshot.error}');
+                print(
+                    '[ICTManagerHome] Alert trend stream error: ${snapshot.error}');
                 return _dashboardDataError('Unable to load alert trends.');
               }
               if (!snapshot.hasData) {
@@ -989,8 +976,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                     !created.isBefore(weekStart.add(const Duration(days: 7)))) {
                   continue;
                 }
-                final severity = (data['severityId'] as String? ?? '')
-                    .toLowerCase();
+                final severity =
+                    (data['severityId'] as String? ?? '').toLowerCase();
                 final severityIndex = switch (severity) {
                   'critical' => 0,
                   'high' => 1,
@@ -1014,7 +1001,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                   ),
               ];
               final maxCount = counts
-                  .map((day) => day.fold<double>(0, (sum, value) => sum + value))
+                  .map(
+                      (day) => day.fold<double>(0, (sum, value) => sum + value))
                   .reduce((a, b) => a > b ? a : b);
               if (maxCount == 0) {
                 return const SizedBox(
@@ -1140,36 +1128,38 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
   }
 
   Widget _buildReportGeneratorCard(UserModel? user) {
-    return Container(
+    return GlassSurface(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: _ICTColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _ICTColors.border),
-      ),
+      radius: 14,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final title = Row(
                 children: [
-                  Icon(Icons.description_outlined,
+                  const Icon(Icons.description_outlined,
                       color: _ICTColors.accent, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'EXECUTIVE REPORT GENERATION & EXPORT',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                      color: _ICTColors.textSecondary,
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'EXECUTIVE REPORT GENERATION & EXPORT',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                        color: _ICTColors.textSecondary,
+                      ),
                     ),
                   ),
                 ],
-              ),
-              Row(
+              );
+              final actions = Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
                 children: [
                   OutlinedButton.icon(
                     onPressed: _exportCsvData,
@@ -1182,7 +1172,6 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                           horizontal: 14, vertical: 10),
                     ),
                   ),
-                  const SizedBox(width: 12),
                   ElevatedButton.icon(
                     onPressed:
                         _isExporting ? null : () => _exportPdfReport(user),
@@ -1209,137 +1198,79 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                     ),
                   ),
                 ],
-              ),
-            ],
+              );
+
+              if (constraints.maxWidth < 760) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    title,
+                    const SizedBox(height: 12),
+                    Align(alignment: Alignment.centerRight, child: actions),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: title),
+                  const SizedBox(width: 16),
+                  actions,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 20),
 
-          // Filters Row
-          Row(
-            children: [
-              Expanded(
-                flex: 4,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Report Type',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: _ICTColors.textMuted)),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: _ICTColors.surfaceAlt,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _ICTColors.border),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedReportType,
-                          isExpanded: true,
-                          dropdownColor: _ICTColors.surfaceAlt,
-                          style: const TextStyle(
-                              color: _ICTColors.textPrimary, fontSize: 13),
-                          items: _reportTypes
-                              .map((t) =>
-                                  DropdownMenuItem(value: t, child: Text(t)))
-                              .toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _selectedReportType = val);
-                            }
-                          },
-                        ),
-                      ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 650;
+              final width = constraints.maxWidth;
+              final gap = isNarrow ? 12.0 : 16.0;
+              final reportTypeWidth = isNarrow
+                  ? (width < 440 ? width : (width - gap) / 2)
+                  : (width - 2 * gap) * 0.4;
+              final dateRangeWidth = isNarrow
+                  ? (width < 440 ? width : (width - gap) / 2)
+                  : (width - 2 * gap) * 0.3;
+              final optionWidth = isNarrow ? width : (width - 2 * gap) * 0.3;
+
+              return Wrap(
+                spacing: gap,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: reportTypeWidth,
+                    child: _reportDropdown(
+                      title: 'Report Type',
+                      value: _selectedReportType,
+                      values: _reportTypes,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedReportType = value);
+                        }
+                      },
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Time Window',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: _ICTColors.textMuted)),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: _ICTColors.surfaceAlt,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _ICTColors.border),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedDateRange,
-                          isExpanded: true,
-                          dropdownColor: _ICTColors.surfaceAlt,
-                          style: const TextStyle(
-                              color: _ICTColors.textPrimary, fontSize: 13),
-                          items: _dateRanges
-                              .map((r) =>
-                                  DropdownMenuItem(value: r, child: Text(r)))
-                              .toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _selectedDateRange = val);
-                            }
-                          },
-                        ),
-                      ),
+                  ),
+                  SizedBox(
+                    width: dateRangeWidth,
+                    child: _reportDropdown(
+                      title: 'Time Window',
+                      value: _selectedDateRange,
+                      values: _dateRanges,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedDateRange = value);
+                        }
+                      },
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Report Options',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: _ICTColors.textMuted)),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _ICTColors.surfaceAlt,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _ICTColors.border),
-                      ),
-                      child: Row(
-                        children: [
-                          Checkbox(
-                            value: _includeChartsInReport,
-                            activeColor: _ICTColors.accent,
-                            onChanged: (val) {
-                              setState(
-                                  () => _includeChartsInReport = val ?? true);
-                            },
-                          ),
-                          const Text(
-                            'Embed KPI Charts',
-                            style: TextStyle(
-                                color: _ICTColors.textPrimary, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+                  SizedBox(
+                    width: optionWidth,
+                    child: _reportOptions(),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 20),
 
@@ -1354,23 +1285,37 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final title = Text(
                       'PREVIEW: $_selectedReportType ($_selectedDateRange)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.1,
                         color: _ICTColors.accent,
                       ),
-                    ),
-                    const Text(
+                    );
+                    const status = Text(
                       'Status: Ready to Export',
                       style: TextStyle(fontSize: 11, color: _ICTColors.healthy),
-                    ),
-                  ],
+                    );
+                    if (constraints.maxWidth < 560) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [title, const SizedBox(height: 6), status],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: title),
+                        const SizedBox(width: 12),
+                        status,
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 10),
                 const Text(
@@ -1390,6 +1335,103 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _reportDropdown({
+    required String title,
+    required String value,
+    required List<String> values,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: _ICTColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: _ICTColors.surfaceAlt,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: _ICTColors.border),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              isExpanded: true,
+              dropdownColor: _ICTColors.surfaceAlt,
+              style: const TextStyle(
+                color: _ICTColors.textPrimary,
+                fontSize: 13,
+              ),
+              items: values
+                  .map((item) => DropdownMenuItem(
+                        value: item,
+                        child: Text(
+                          item,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ))
+                  .toList(),
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _reportOptions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Report Options',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: _ICTColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: _ICTColors.surfaceAlt,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: _ICTColors.border),
+          ),
+          child: Row(
+            children: [
+              Checkbox(
+                value: _includeChartsInReport,
+                activeColor: _ICTColors.accent,
+                visualDensity: VisualDensity.compact,
+                onChanged: (value) {
+                  setState(() => _includeChartsInReport = value ?? true);
+                },
+              ),
+              const Expanded(
+                child: Text(
+                  'Embed KPI Charts',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: _ICTColors.textPrimary, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

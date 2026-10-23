@@ -1,8 +1,4 @@
 """
-train.py - Model Training and Validation Pipeline
-Project: NetVision AI (Strathmore University)
-Author: Bertram Chabu (166458, BBIT 4C)
-
 Fulfills Specific Objective ii & Phase 4 Refining Prototype:
 - Trains lightweight BiLSTM on 5 KPIs
 - Splits 80% train / 20% held-out test data

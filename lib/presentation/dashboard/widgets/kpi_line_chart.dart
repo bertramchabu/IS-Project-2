@@ -1,6 +1,8 @@
+// kpi_line_chart.dart
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../../data/models/kpi_metric_model.dart';
+import '../../widgets/glass_ui.dart';
 
 class KpiLineChart extends StatelessWidget {
   final String title;
@@ -22,9 +24,7 @@ class KpiLineChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (metrics.isEmpty) {
-      return _emptyCard(context, title, unit, color);
-    }
+    if (metrics.isEmpty) return _emptyCard(context, title, unit, color);
 
     final spots = <FlSpot>[];
     for (var i = 0; i < metrics.length; i++) {
@@ -39,136 +39,173 @@ class KpiLineChart extends StatelessWidget {
         : (maxY - minY) * 0.2;
     final latest = metrics.last.value;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600)),
-                Text(
-                  '${latest.toStringAsFixed(1)} $unit',
-                  style: TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold, color: color),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            StreamBuilder<int>(
-              stream: Stream<int>.periodic(
-                  const Duration(seconds: 1), (tick) => tick),
-              initialData: 0,
-              builder: (context, _) {
-                final age = DateTime.now().difference(metrics.last.timestamp);
-                final isLive =
-                    age >= Duration.zero && age <= const Duration(seconds: 5);
-                final updateText = age < Duration.zero
-                    ? 'timestamp in future'
-                    : age.inSeconds < 60
-                        ? 'updated ${age.inSeconds}s ago'
-                        : 'updated ${age.inMinutes}m ago';
-                return Text(
-                  '${metrics.length} samples • ${isLive ? 'LIVE' : 'STALE'} • $updateText',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isLive ? Colors.greenAccent : Colors.white54,
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: LineChart(
-                LineChartData(
-                  minY: minY - padding,
-                  maxY: maxY + padding,
-                  gridData:
-                      const FlGridData(show: true, drawVerticalLine: false),
-                  titlesData: const FlTitlesData(
-                    leftTitles:
-                        AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles:
-                        AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles:
-                        AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    bottomTitles:
-                        AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: spots,
-                      isCurved: true,
-                      color: color,
-                      barWidth: 2,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        color: color.withValues(alpha: 0.15),
-                      ),
-                    ),
+    return GlassSurface(
+      padding: const EdgeInsets.all(12),
+      radius: 16,
+      tint: const Color(0xFF111827),
+      blurSigma: 12,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: 0.5)),
+              Text(
+                '${latest.toStringAsFixed(1)} $unit',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                  shadows: [
+                    Shadow(color: color.withValues(alpha: 0.5), blurRadius: 8)
                   ],
-                  extraLinesData: ExtraLinesData(horizontalLines: [
-                    if (warningThreshold != null)
-                      HorizontalLine(
-                        y: warningThreshold!,
-                        color: Colors.orange.withValues(alpha: 0.5),
-                        strokeWidth: 1,
-                        dashArray: [4, 4],
-                      ),
-                    if (criticalThreshold != null)
-                      HorizontalLine(
-                        y: criticalThreshold!,
-                        color: Colors.red.withValues(alpha: 0.5),
-                        strokeWidth: 1,
-                        dashArray: [4, 4],
-                      ),
-                  ]),
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          StreamBuilder<int>(
+            stream: Stream<int>.periodic(
+                const Duration(seconds: 1), (tick) => tick),
+            initialData: 0,
+            builder: (context, _) {
+              final age = DateTime.now().difference(metrics.last.timestamp);
+              final isLive =
+                  age >= Duration.zero && age <= const Duration(seconds: 5);
+              final updateText = age < Duration.zero
+                  ? 'timestamp in future'
+                  : age.inSeconds < 60
+                      ? 'updated ${age.inSeconds}s ago'
+                      : 'updated ${age.inMinutes}m ago';
+              final source = metrics.every(
+                (metric) => metric.source == DataSource.csvReplay,
+              )
+                  ? 'CSV REPLAY'
+                  : metrics.any(
+                          (metric) => metric.source == DataSource.csvReplay)
+                      ? 'MIXED'
+                      : 'FIRESTORE';
+              return Text(
+                '$source • ${metrics.length} samples • ${isLive ? 'LIVE' : 'STALE'} • $updateText',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 11,
+                    color: isLive ? const Color(0xFF00FF9D) : Colors.white54,
+                    fontFamily: 'monospace'),
+              );
+            },
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: LineChart(
+              LineChartData(
+                minY: minY - padding,
+                maxY: maxY + padding,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    strokeWidth: 1,
+                  ),
+                ),
+                titlesData: const FlTitlesData(
+                  leftTitles:
+                      AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles:
+                      AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles:
+                      AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles:
+                      AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                ),
+                borderData: FlBorderData(show: false),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    color: color,
+                    barWidth: 2.5,
+                    isStrokeCapRound: true,
+                    dotData: const FlDotData(show: false),
+                    shadow: Shadow(
+                        color: color.withValues(alpha: 0.6),
+                        blurRadius: 12), // Neon glow
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          color.withValues(alpha: 0.25),
+                          color.withValues(alpha: 0.0)
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                extraLinesData: ExtraLinesData(horizontalLines: [
+                  if (warningThreshold != null)
+                    HorizontalLine(
+                        y: warningThreshold!,
+                        color: const Color(0xFFFFB300).withValues(alpha: 0.4),
+                        strokeWidth: 1,
+                        dashArray: [4, 4]),
+                  if (criticalThreshold != null)
+                    HorizontalLine(
+                        y: criticalThreshold!,
+                        color: const Color(0xFFFF0055).withValues(alpha: 0.4),
+                        strokeWidth: 1,
+                        dashArray: [4, 4]),
+                ]),
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _emptyCard(
       BuildContext context, String title, String unit, Color color) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            const Spacer(),
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.show_chart,
-                      color: color.withValues(alpha: 0.5), size: 24),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'No data available',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
-                  ),
-                ],
-              ),
+    return GlassSurface(
+      padding: const EdgeInsets.all(12),
+      radius: 16,
+      tint: const Color(0xFF111827),
+      blurSigma: 12,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white)),
+          const Spacer(),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.show_chart,
+                    color: color.withValues(alpha: 0.4), size: 28),
+                const SizedBox(height: 8),
+                const Text('No data available',
+                    style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                        fontFamily: 'monospace')),
+              ],
             ),
-            const Spacer(),
-          ],
-        ),
+          ),
+          const Spacer(),
+        ],
       ),
     );
   }

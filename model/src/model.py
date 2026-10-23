@@ -1,7 +1,4 @@
 """
-model.py - BiLSTM Neural Network Architecture for Fault Anticipation
-Project: NetVision AI (Strathmore University)
-Author: Bertram Chabu (166458, BBIT 4C)
 
 Architecture adheres strictly to Proposal Section 3.2.3:
 - Input layer: accepting multivariate sequences of 5 KPIs (latency, jitter, packet loss, retransmission rate, signal strength)

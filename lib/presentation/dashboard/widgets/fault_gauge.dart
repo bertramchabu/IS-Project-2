@@ -1,10 +1,14 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../data/models/alert_model.dart';
+import '../../../data/models/kpi_metric_model.dart';
 import '../../../data/models/prediction_model.dart';
+import '../../widgets/web_safe_backdrop_blur.dart';
 
 class FaultGauge extends StatelessWidget {
   final PredictionModel? prediction;
+  final List<KpiMetricModel> metrics;
+  final String? predictionSource;
   final bool modelApiAvailable;
   final String? statusMessage;
   final double? modelF1Score;
@@ -13,354 +17,688 @@ class FaultGauge extends StatelessWidget {
   const FaultGauge({
     super.key,
     this.prediction,
+    this.metrics = const [],
+    this.predictionSource,
     this.modelApiAvailable = false,
     this.statusMessage,
     this.modelF1Score,
     this.onRetry,
   });
 
+  // Futuristic Base Colors
+  static const _bgColor = Color(0xFF0B111A);
+  static const _glassBorderColor = Color(0x33FFFFFF);
+  static const _textMuted = Color(0xFF64748B);
+  static const _accentCyan = Color(0xFF00E5FF);
+
   @override
   Widget build(BuildContext context) {
-    const surfaceColor = Color(0xFF111827);
-    const borderColor = Color(0xFF1F2A3A);
-    const textPrimary = Color(0xFFF1F5F9);
-    const textMuted = Color(0xFF64748B);
+    final probability = prediction?.faultProbability ?? 0.0;
+    final hasPrediction = prediction != null;
 
-    final probability = prediction?.faultProbability ?? 0;
-    final sevColor = prediction == null
-        ? modelApiAvailable
-            ? const Color(0xFF00E5FF)
-            : textMuted
+    final sevColor = !hasPrediction
+        ? (modelApiAvailable ? _accentCyan : _textMuted)
         : _severityColor(prediction!.severity);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: sevColor,
-                        boxShadow: [
-                          BoxShadow(
-                            color: sevColor.withOpacity(0.6),
-                            blurRadius: 6,
-                            spreadRadius: 1,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'FAULT ANTICIPATION GAUGE',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF94A3B8),
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ),
+    final statusText = _statusText(hasPrediction, probability);
+    final thresholdExceeded = hasPrediction && probability >= 0.70;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTight = constraints.maxHeight < 360;
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: WebSafeBackdropBlur(
+            sigma: 12,
+            child: Container(
+              decoration: BoxDecoration(
+                // Glassmorphic Background Gradient
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    _bgColor.withValues(alpha: 0.85),
+                    const Color(0xFF141E30).withValues(alpha: 0.65),
                   ],
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: sevColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: sevColor.withOpacity(0.4)),
-                ),
-                child: Text(
-                  prediction?.severityLabel ??
-                      (modelApiAvailable ? 'BUFFERING' : 'OFFLINE'),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: sevColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _glassBorderColor, width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: sevColor.withValues(alpha: 0.08), // Ambient glow
+                    blurRadius: 24,
+                    spreadRadius: 2,
                   ),
-                ),
+                  const BoxShadow(
+                    color: Color(0x66000000),
+                    blurRadius: 12,
+                    offset: Offset(0, 6),
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Central Radial Gauge
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final gaugeWidth = math.min(300.0, constraints.maxWidth);
-                final gaugeHeight = math.min(190.0, constraints.maxHeight);
-                return Center(
-                  child: TweenAnimationBuilder<double>(
-                    tween: Tween<double>(end: probability),
-                    duration: const Duration(milliseconds: 850),
-                    curve: Curves.easeOutCubic,
-                    builder: (context, animatedProbability, _) => SizedBox(
-                      width: gaugeWidth,
-                      height: gaugeHeight,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          CustomPaint(
-                            painter: _SpeedometerPainter(
-                              probability: animatedProbability,
-                              color: sevColor,
-                            ),
-                          ),
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  prediction == null
-                                      ? '--'
-                                      : '${(animatedProbability * 100).toStringAsFixed(0)}%',
-                                  style: TextStyle(
-                                    fontSize: 32,
-                                    height: 1,
-                                    fontWeight: FontWeight.w900,
-                                    color: sevColor,
-                                    letterSpacing: -1,
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  prediction == null
-                                      ? modelApiAvailable
-                                          ? 'BUFFERING KPI DATA'
-                                          : 'MODEL CONNECTION REQUIRED'
-                                      : probability >= 0.70
-                                          ? 'THRESHOLD EXCEEDED'
-                                          : probability >= 0.40
-                                              ? 'ELEVATED RISK'
-                                              : 'NOMINAL (HEALTHY)',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700,
-                                    color: probability >= 0.70
-                                        ? const Color(0xFFEF4444)
-                                        : const Color(0xFF94A3B8),
-                                    letterSpacing: 1.1,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+              padding: EdgeInsets.all(isTight ? 12 : 18),
+              child: Stack(
+                children: [
+                  // Subtle Background Grid (Sci-Fi HUD feel)
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter:
+                          _GridPainter(color: sevColor.withValues(alpha: 0.05)),
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 10),
 
-          // Footer info
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A2332),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: borderColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.memory_rounded,
-                        size: 14, color: Color(0xFF00E5FF)),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'BiLSTM ${prediction?.modelVersionId ?? (modelApiAvailable ? 'loading' : 'offline')}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: textPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const Icon(Icons.speed_rounded,
-                        size: 14, color: Color(0xFF94A3B8)),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${prediction?.inferenceTimeMs ?? '—'} ms',
-                      style: const TextStyle(fontSize: 11, color: textMuted),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        prediction?.message ??
-                            statusMessage ??
-                            'Waiting for live KPI data',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 10, color: textMuted),
-                      ),
-                    ),
-                    if (!modelApiAvailable && onRetry != null)
-                      IconButton(
-                        onPressed: onRetry,
-                        tooltip: 'Retry model connection',
-                        icon: const Icon(Icons.refresh_rounded, size: 16),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints.tightFor(
-                          width: 28,
-                          height: 28,
-                        ),
-                        visualDensity: VisualDensity.compact,
-                        color: const Color(0xFF00E5FF),
-                      ),
-                  ],
-                ),
-                if (modelF1Score != null ||
-                    prediction?.computationalSavingsPercent != null) ...[
-                  const SizedBox(height: 4),
-                  Row(
+                  // Main Content
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (modelF1Score != null)
-                        Text(
-                          'F1 ${(modelF1Score! * 100).toStringAsFixed(1)}%',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF00E5FF),
+                      _Header(
+                        sevColor: sevColor,
+                        label: prediction?.severityLabel ??
+                            (modelApiAvailable ? 'BUFFERING' : 'OFFLINE'),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Gauge Area
+                      Expanded(
+                        child: Center(
+                          child: TweenAnimationBuilder<double>(
+                            tween:
+                                Tween<double>(end: probability.clamp(0.0, 1.0)),
+                            duration: const Duration(milliseconds: 800),
+                            curve: Curves.easeOutCubic,
+                            builder: (context, animatedProbability, _) {
+                              return RepaintBoundary(
+                                child: SizedBox.expand(
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      CustomPaint(
+                                        key: const ValueKey('fault-gauge-dial'),
+                                        painter: _FuturisticGaugePainter(
+                                          probability: animatedProbability,
+                                          color: sevColor,
+                                        ),
+                                      ),
+                                      Align(
+                                        alignment: Alignment.bottomCenter,
+                                        child: _GaugeReadout(
+                                          hasPrediction: hasPrediction,
+                                          probability: animatedProbability,
+                                          sevColor: sevColor,
+                                          statusText: statusText,
+                                          thresholdExceeded: thresholdExceeded,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                      if (modelF1Score != null &&
-                          prediction?.computationalSavingsPercent != null)
-                        const SizedBox(width: 10),
-                      if (prediction?.computationalSavingsPercent != null)
-                        Text(
-                          'Compute saved ${prediction!.computationalSavingsPercent}%',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Color(0xFF22C55E),
-                          ),
-                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      _FooterInfo(
+                        prediction: prediction,
+                        modelApiAvailable: modelApiAvailable,
+                        statusMessage: statusMessage,
+                        modelF1Score: modelF1Score,
+                        metrics: metrics,
+                        predictionSource: predictionSource,
+                        onRetry: onRetry,
+                        isTight: isTight,
+                        sevColor: sevColor,
+                      ),
                     ],
                   ),
                 ],
-              ],
+              ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  String _statusText(bool hasPrediction, double probability) {
+    if (!hasPrediction) {
+      return modelApiAvailable ? 'AWAITING KPI STREAM' : 'SYS DISCONNECTED';
+    }
+    if (probability >= 0.70) return 'CRITICAL THRESHOLD';
+    if (probability >= 0.40) return 'ELEVATED RISK';
+    return 'SYSTEM NOMINAL';
   }
 
   Color _severityColor(AlertSeverity severity) {
     switch (severity) {
       case AlertSeverity.low:
-        return const Color(0xFF22C55E);
+        return const Color(0xFF00FF9D); // Neon Green
       case AlertSeverity.medium:
-        return const Color(0xFFF59E0B);
+        return const Color(0xFFFFB300); // Neon Yellow
       case AlertSeverity.high:
-        return const Color(0xFFFB923C);
+        return const Color(0xFFFF6D00); // Neon Orange
       case AlertSeverity.critical:
-        return const Color(0xFFEF4444);
+        return const Color(0xFFFF0055); // Neon Red
     }
   }
 }
 
-class _SpeedometerPainter extends CustomPainter {
+// ---------------------------------------------------------------------------
+
+class _Header extends StatelessWidget {
+  final Color sevColor;
+  final String label;
+  const _Header({required this.sevColor, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        // Neon pulse dot
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: sevColor,
+            boxShadow: [
+              BoxShadow(color: sevColor, blurRadius: 8, spreadRadius: 2),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Expanded(
+          child: Text(
+            'FAULT ANTICIPATION',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFFE2E8F0),
+              letterSpacing: 2.0, // Wider tracking for sci-fi feel
+              fontFamily:
+                  'monospace', // Fallback to monospace if no custom font
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Glass Badge
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: sevColor.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: sevColor.withValues(alpha: 0.5)),
+            boxShadow: [
+              BoxShadow(color: sevColor.withValues(alpha: 0.2), blurRadius: 8),
+            ],
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              color: sevColor,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+class _GaugeReadout extends StatelessWidget {
+  final bool hasPrediction;
+  final double probability;
+  final Color sevColor;
+  final String statusText;
+  final bool thresholdExceeded;
+
+  const _GaugeReadout({
+    required this.hasPrediction,
+    required this.probability,
+    required this.sevColor,
+    required this.statusText,
+    required this.thresholdExceeded,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Glowing Digital Value
+        MediaQuery.withClampedTextScaling(
+          maxScaleFactor: 1.2,
+          child: Text(
+            hasPrediction
+                ? '${(probability * 100).toStringAsFixed(1)}%'
+                : '--%',
+            style: TextStyle(
+              fontSize: 54,
+              height: 1,
+              fontWeight: FontWeight.w900,
+              color: sevColor,
+              letterSpacing: -1.5,
+              shadows: [
+                Shadow(color: sevColor.withValues(alpha: 0.8), blurRadius: 16),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+        // Subtitle status
+        MediaQuery.withClampedTextScaling(
+          maxScaleFactor: 1.1,
+          child: Text(
+            statusText,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: thresholdExceeded
+                  ? const Color(0xFFFF0055)
+                  : const Color(0xFF94A3B8),
+              letterSpacing: 1.5,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+class _FooterInfo extends StatelessWidget {
+  final PredictionModel? prediction;
+  final bool modelApiAvailable;
+  final String? statusMessage;
+  final double? modelF1Score;
+  final List<KpiMetricModel> metrics;
+  final String? predictionSource;
+  final VoidCallback? onRetry;
+  final bool isTight;
+  final Color sevColor;
+
+  const _FooterInfo({
+    required this.prediction,
+    required this.modelApiAvailable,
+    required this.statusMessage,
+    required this.modelF1Score,
+    required this.metrics,
+    required this.predictionSource,
+    required this.onRetry,
+    required this.isTight,
+    required this.sevColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final showMetrics = (modelF1Score != null ||
+            prediction?.computationalSavingsPercent != null) &&
+        !isTight;
+    final displayMessage =
+        statusMessage?.startsWith('Live inference failed:') == true
+            ? statusMessage!
+            : prediction?.message ?? statusMessage ?? 'Awaiting telemetry...';
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: isTight ? 8 : 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.memory_rounded, size: 14, color: sevColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'BiLSTM ${prediction?.modelVersionId ?? (modelApiAvailable ? 'LOADING' : 'OFFLINE')}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFFE2E8F0),
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+              const Icon(Icons.speed_rounded,
+                  size: 14, color: Color(0xFF64748B)),
+              const SizedBox(width: 4),
+              Text(
+                '${prediction?.inferenceTimeMs ?? '—'} ms',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF64748B),
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  displayMessage,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFF94A3B8),
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+              if (!modelApiAvailable && onRetry != null)
+                GestureDetector(
+                  onTap: onRetry,
+                  child: Icon(
+                    Icons.refresh_rounded,
+                    size: 16,
+                    color: sevColor,
+                  ),
+                ),
+            ],
+          ),
+          if (prediction != null) ...[
+            const SizedBox(height: 5),
+            _PredictionSourceReadout(
+              prediction: prediction!,
+              source: predictionSource ?? 'Prediction',
+              statusMessage: displayMessage,
+              inputTimestamp: prediction!.inputTimestamp,
+              color: sevColor,
+            ),
+          ],
+          if (metrics.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            _LiveKpiReadout(metrics: metrics, color: sevColor),
+          ],
+          if (showMetrics) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                if (modelF1Score != null)
+                  Text(
+                    'F1_SCORE: ${(modelF1Score! * 100).toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: sevColor,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                if (modelF1Score != null &&
+                    prediction?.computationalSavingsPercent != null)
+                  const SizedBox(width: 12),
+                if (prediction?.computationalSavingsPercent != null)
+                  Text(
+                    'CPU_SAVED: ${prediction!.computationalSavingsPercent}%',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF00FF9D),
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PredictionSourceReadout extends StatelessWidget {
+  final PredictionModel prediction;
+  final String source;
+  final String? statusMessage;
+  final DateTime? inputTimestamp;
+  final Color color;
+
+  const _PredictionSourceReadout({
+    required this.prediction,
+    required this.source,
+    required this.statusMessage,
+    required this.inputTimestamp,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final age = DateTime.now().difference(prediction.predictionTimestamp);
+    final ageText = age.isNegative
+        ? 'clock mismatch'
+        : age.inSeconds < 60
+            ? '${age.inSeconds}s ago'
+            : '${age.inMinutes}m ago';
+    final sourceLabel =
+        source == 'Live BiLSTM API' ? 'MODEL API' : source.toUpperCase();
+    final isStale =
+        statusMessage?.startsWith('Live inference failed:') ?? false;
+    final inputAge = inputTimestamp == null
+        ? null
+        : DateTime.now().difference(inputTimestamp!);
+    final inputAgeText = inputAge == null
+        ? null
+        : inputAge.isNegative
+            ? 'clock mismatch'
+            : inputAge.inSeconds < 60
+                ? '${inputAge.inSeconds}s KPI'
+                : '${inputAge.inMinutes}m KPI';
+
+    return Row(
+      children: [
+        Icon(
+          isStale ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+          size: 11,
+          color: isStale ? const Color(0xFFFFB300) : color,
+        ),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            '$sourceLabel · $ageText${inputAgeText == null ? '' : ' · $inputAgeText'}${isStale ? ' · LAST READING' : ''}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color:
+                  isStale ? const Color(0xFFFFB300) : const Color(0xFF94A3B8),
+              fontSize: 9,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LiveKpiReadout extends StatelessWidget {
+  final List<KpiMetricModel> metrics;
+  final Color color;
+
+  const _LiveKpiReadout({required this.metrics, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final latestByType = <MetricType, KpiMetricModel>{};
+    for (final metric in metrics) {
+      final previous = latestByType[metric.metricType];
+      if (previous == null || metric.timestamp.isAfter(previous.timestamp)) {
+        latestByType[metric.metricType] = metric;
+      }
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          Text(
+            _sourceLabel,
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(width: 8),
+          for (final type in MetricType.values) ...[
+            if (type != MetricType.values.first)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 5),
+                child: Text(
+                  '·',
+                  style: TextStyle(color: Color(0xFF475569), fontSize: 10),
+                ),
+              ),
+            Text(
+              '${_shortName(type)} ${_formatValue(latestByType[type])}',
+              style: TextStyle(
+                color: latestByType.containsKey(type)
+                    ? const Color(0xFFCBD5E1)
+                    : color,
+                fontSize: 9,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String get _sourceLabel {
+    if (metrics.every((metric) => metric.source == DataSource.csvReplay)) {
+      return 'CSV REPLAY';
+    }
+    if (metrics.any((metric) => metric.source == DataSource.csvReplay)) {
+      return 'MIXED KPI';
+    }
+    return 'FIRESTORE';
+  }
+
+  String _shortName(MetricType type) {
+    switch (type) {
+      case MetricType.latency:
+        return 'LAT';
+      case MetricType.jitter:
+        return 'JIT';
+      case MetricType.packetLoss:
+        return 'LOSS';
+      case MetricType.retransmissionRate:
+        return 'RETX';
+      case MetricType.signalStrength:
+        return 'SIG';
+    }
+  }
+
+  String _formatValue(KpiMetricModel? metric) {
+    if (metric == null) return '--';
+    final value = metric.value.toStringAsFixed(1);
+    return switch (metric.metricType) {
+      MetricType.latency || MetricType.jitter => '$value${metric.unit}',
+      MetricType.packetLoss || MetricType.retransmissionRate => '$value%',
+      MetricType.signalStrength => value,
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+/// Background Grid for Sci-Fi feel
+class _GridPainter extends CustomPainter {
+  final Color color;
+  _GridPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.0;
+
+    const spacing = 20.0;
+    for (double i = 0; i < size.width; i += spacing) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
+    }
+    for (double i = 0; i < size.height; i += spacing) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ---------------------------------------------------------------------------
+
+class _FuturisticGaugePainter extends CustomPainter {
   final double probability;
   final Color color;
 
-  _SpeedometerPainter({required this.probability, required this.color});
+  _FuturisticGaugePainter({required this.probability, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
     const tickCount = 20;
     const startAngle = math.pi;
     const sweepAngle = math.pi;
-    final radius = math.min(size.width * 0.43, size.height * 0.65);
-    final pivot = Offset(size.width / 2, size.height * 0.72);
-    final arcRect = Rect.fromCircle(center: pivot, radius: radius);
 
+    final radius = math.min(size.width * 0.45, size.height * 0.85);
+    final pivot = Offset(size.width / 2, size.height);
+    final arcRect = Rect.fromCircle(center: pivot, radius: radius);
+    final p = probability.clamp(0.0, 1.0);
+
+    // 1. Dark Track (Base)
     canvas.drawArc(
       arcRect,
       startAngle,
       sweepAngle,
       false,
       Paint()
-        ..color = const Color(0xFF1F2A3A)
+        ..color = Colors.white.withValues(alpha: 0.05)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 15
+        ..strokeWidth = 16
         ..strokeCap = StrokeCap.round,
     );
 
-    const riskColors = [
-      Color(0xFF22C55E),
-      Color(0xFF84CC16),
-      Color(0xFFF59E0B),
-      Color(0xFFF97316),
-      Color(0xFFEF4444),
-    ];
-    for (var i = 0; i < riskColors.length; i++) {
-      canvas.drawArc(
-        arcRect,
-        startAngle + sweepAngle * i / riskColors.length,
-        sweepAngle / riskColors.length - 0.025,
-        false,
-        Paint()
-          ..color = riskColors[i].withOpacity(0.38)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 5
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-
-    final activeSweep = sweepAngle * probability.clamp(0.0, 1.0);
-    if (activeSweep > 0) {
+    // 2. Neon Active Arc (with heavy glow)
+    final activeSweep = sweepAngle * p;
+    if (activeSweep > 0.001) {
+      // Outer Glow
       canvas.drawArc(
         arcRect,
         startAngle,
         activeSweep,
         false,
         Paint()
-          ..color = color.withOpacity(0.25)
+          ..color = color.withValues(alpha: 0.4)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 18
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+          ..strokeWidth = 24
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
       );
+      // Core Line
       canvas.drawArc(
         arcRect,
         startAngle,
@@ -369,104 +707,120 @@ class _SpeedometerPainter extends CustomPainter {
         Paint()
           ..color = color
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 8
+          ..strokeWidth = 6
           ..strokeCap = StrokeCap.round,
       );
     }
 
+    // 3. Ticks & Labels (Futuristic HUD)
     for (var i = 0; i <= tickCount; i++) {
       final fraction = i / tickCount;
       final angle = startAngle + sweepAngle * fraction;
-      final majorTick = i % 2 == 0;
-      final innerRadius = radius - (majorTick ? 17 : 11);
-      final outerRadius = radius - 3;
-      final tickPaint = Paint()
-        ..color = majorTick ? const Color(0xFFCBD5E1) : const Color(0xFF64748B)
-        ..strokeWidth = majorTick ? 2 : 1
-        ..strokeCap = StrokeCap.round;
+      final majorTick = i.isEven;
+
+      final innerRadius = radius - (majorTick ? 24.0 : 16.0);
+      final outerRadius = radius - 6.0;
+
+      final cosA = math.cos(angle);
+      final sinA = math.sin(angle);
+
+      // Draw Tick
       canvas.drawLine(
-        Offset(
-          pivot.dx + innerRadius * math.cos(angle),
-          pivot.dy + innerRadius * math.sin(angle),
-        ),
-        Offset(
-          pivot.dx + outerRadius * math.cos(angle),
-          pivot.dy + outerRadius * math.sin(angle),
-        ),
-        tickPaint,
+        Offset(pivot.dx + innerRadius * cosA, pivot.dy + innerRadius * sinA),
+        Offset(pivot.dx + outerRadius * cosA, pivot.dy + outerRadius * sinA),
+        Paint()
+          ..color = majorTick
+              ? color.withValues(alpha: 0.8)
+              : Colors.white.withValues(alpha: 0.3)
+          ..strokeWidth = majorTick ? 2.5 : 1.0
+          ..strokeCap = StrokeCap.round,
       );
 
+      // Draw Label (Only for major ticks)
       if (majorTick) {
-        final label = TextPainter(
+        final textPainter = TextPainter(
           text: TextSpan(
             text: '${(fraction * 100).round()}',
-            style: const TextStyle(
-              color: Color(0xFF94A3B8),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
               fontSize: 9,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'monospace',
             ),
           ),
           textDirection: TextDirection.ltr,
         )..layout();
-        final labelRadius = radius - 31;
-        label.paint(
-          canvas,
-          Offset(
-            pivot.dx + labelRadius * math.cos(angle) - label.width / 2,
-            pivot.dy + labelRadius * math.sin(angle) - label.height / 2,
-          ),
-        );
+
+        final labelRadius = radius - 40;
+        final lx = pivot.dx + labelRadius * cosA - textPainter.width / 2;
+        final ly = pivot.dy + labelRadius * sinA - textPainter.height / 2;
+
+        textPainter.paint(canvas, Offset(lx, ly));
       }
     }
 
-    final needleAngle = startAngle + sweepAngle * probability.clamp(0.0, 1.0);
-    final needleLength = radius * 0.76;
-    final needleTip = Offset(
+    // 4. High-Tech Needle
+    final needleAngle = startAngle + sweepAngle * p;
+    final needleLength = radius * 0.7;
+    final tip = Offset(
       pivot.dx + needleLength * math.cos(needleAngle),
       pivot.dy + needleLength * math.sin(needleAngle),
     );
+
+    // Needle Glow
     canvas.drawLine(
       pivot,
-      needleTip,
+      tip,
       Paint()
-        ..color = color.withOpacity(0.25)
-        ..strokeWidth = 9
-        ..strokeCap = StrokeCap.round,
+        ..color = color.withValues(alpha: 0.5)
+        ..strokeWidth = 12
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
+
+    // Needle Core
     canvas.drawLine(
       pivot,
-      needleTip,
+      tip,
       Paint()
-        ..color = color
+        ..color = Colors.white
         ..strokeWidth = 3
         ..strokeCap = StrokeCap.round,
     );
+
+    // 5. Center Hub (Digital)
+    canvas.drawCircle(pivot, 14, Paint()..color = const Color(0xFF0B111A));
     canvas.drawCircle(
       pivot,
-      8,
-      Paint()..color = const Color(0xFF0B1220),
-    );
-    canvas.drawCircle(
-      pivot,
-      5,
+      14,
       Paint()
         ..color = color
-        ..style = PaintingStyle.fill,
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
     );
+    canvas.drawCircle(pivot, 6, Paint()..color = color);
 
-    final thresholdAngle = startAngle + sweepAngle * 0.70;
-    final thresholdPoint = Offset(
-      pivot.dx + (radius + 12) * math.cos(thresholdAngle),
-      pivot.dy + (radius + 12) * math.sin(thresholdAngle),
+    // 6. Threshold Marker (Sleek Line)
+    const thresholdAngle = startAngle + sweepAngle * 0.70;
+    final tStart = Offset(
+      pivot.dx + (radius - 2) * math.cos(thresholdAngle),
+      pivot.dy + (radius - 2) * math.sin(thresholdAngle),
     );
-    canvas.drawCircle(
-      thresholdPoint,
-      3,
-      Paint()..color = const Color(0xFFEF4444),
+    final tEnd = Offset(
+      pivot.dx + (radius + 18) * math.cos(thresholdAngle),
+      pivot.dy + (radius + 18) * math.sin(thresholdAngle),
+    );
+    canvas.drawLine(
+      tStart,
+      tEnd,
+      Paint()
+        ..color = const Color(0xFFFF0055) // Red warning
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round,
     );
   }
 
   @override
-  bool shouldRepaint(_SpeedometerPainter old) =>
+  bool shouldRepaint(_FuturisticGaugePainter old) =>
       old.probability != probability || old.color != color;
 }

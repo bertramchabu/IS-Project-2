@@ -1,8 +1,5 @@
 """
 adaptive_inference.py - Adaptive Rate Prediction Controller
-Project: NetVision AI (Strathmore University)
-Author: Bertram Chabu (166458, BBIT 4C)
-
 Fulfills Specific Objective iii & Functional Requirement FR-BE-05 / FR-BE-08:
 - Default fault detection threshold: 70% (0.70)
 - Visual / Audio alert triggering within 2 seconds
