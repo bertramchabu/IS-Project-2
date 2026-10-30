@@ -1,6 +1,6 @@
 # NetVision AI Project Status
 
-**Status date:** 19 October 2026
+**Status date:** 30 October 2026
 **Project:** An AI-Powered Network Monitoring Dashboard with Intelligent Fault Anticipation
 
 ## Current Position
@@ -8,6 +8,15 @@
 NetVision AI has a Flutter/Firebase dashboard codebase, a trained BiLSTM model, and a Firebase Cloud Functions inference integration. The model-serving functions are deployed to the configured Firebase project, `netvision-ai-0`, in `us-central1`. The Flutter test suite passed during this status review (5 tests).
 
 Deployment was checked with `firebase functions:list --project netvision-ai-0`. It returned the deployed callable functions `model_status` and `predict_fault` (Python 3.11, 512 MiB). This confirms the functions are deployed; a signed-in end-to-end call verifying model loading and live inference was not run as part of this review.
+
+## What the Model Can Analyse
+
+The deployed BiLSTM accepts a 10-sample window of the five KPIs (latency, jitter, packet loss, retransmission rate, signal strength) and outputs exactly one value: a binary fault probability in [0, 1] (sigmoid head, `models/bilstm_fault_model.tflite`, input `[1,10,5]`, output `[1,1]`). It anticipates *whether* a fault is imminent. It does not classify fault types, identify root causes, detect security attacks, or forecast individual KPI values — the training data carries only a binary `fault_label`, so no other analysis is possible without retraining with new labels or output heads.
+
+## 30 October Verification
+
+- Local TFLite inference smoke test passed with the production artifacts (`tflite + scaler.joblib`): a healthy test window returned probability 0.0002 (HEALTHY, 10-second sampling), a fault-precursor window returned 0.3144 (WARNING); median inference latency ~0.4 ms per window on CPU. This verifies the model artifacts and preprocessing chain; the signed-in remote callable call remains outstanding.
+- `py -m src.baseline_comparator` was re-run and exactly reproduced the recorded results (baseline F1 0.9308, BiLSTM F1 0.8593, latency 31.4 s vs 1.25 s, SUS 54.2 vs 83.5). The ambiguous `+-7.7%` field is fixed to `-7.7%` with an `f1_comparison_note` explaining that the row-level baseline scoring and window-level model scoring make raw F1 an unfair comparison; lead time, false-alert rate, and usability are the defensible axes.
 
 ## Implemented
 
@@ -33,15 +42,14 @@ The comparative file (`model/results/comparative_evaluation.json`) records 1.25 
 
 ## Important Reconciliation
 
-The proposal describes a target baseline F1-score of 0.50, but the stored comparative evaluation reports a baseline F1-score of 0.9308, compared with 0.8593 for NetVision AI. Thus, the recorded results support faster anticipation and a higher SUS score, but do **not** show the BiLSTM outperforming the baseline on F1-score. The `f1_improvement` field is also recorded as `+-7.7%`, which is ambiguous. Before presenting the comparison as evidence, reconcile the baseline method, test split, threshold selection, and metric calculations, then regenerate the report from a reproducible evaluation.
+The proposal expected a baseline F1 near 0.50, but the stored and now-reproduced comparative evaluation reports baseline F1 0.9308 versus 0.8593 for NetVision AI. Cause: the baseline is scored row-level (its alerts coincide with rows already labelled as faults, inflating F1), while the BiLSTM is scored on 10-sample windows and fires before thresholds are crossed. The recorded results therefore support faster anticipation (25.1x), zero false alerts, and higher usability (SUS 83.5 vs 54.2), but do **not** claim BiLSTM superiority on raw F1. This is now documented in `model/results/comparative_evaluation.json` (`f1_comparison_note`). Presenting lead time rather than F1 as the headline comparison is the defensible position.
 
 ## Remaining Work / Verification
 
-- Run an authenticated end-to-end call to `model_status`, then submit a valid ten-sample `predict_fault` request and confirm the deployed function loads the model artifacts and returns a prediction.
-- Reconcile comparative metrics with the proposal and correct the ambiguous improvement fields; explain any difference between the proposed baseline target and the evaluated baseline.
-- Verify the reported SUS score against the participant count, questionnaire responses, and calculation records before treating it as a final user-study result.
-- Align project documentation: the root README describes Firebase callable deployment, while the FastAPI service remains available as a separate local path. State clearly which path is used for the final demonstration.
-- Complete any remaining proposal/documentation updates and final browser-level checks of the dashboard, since passing Flutter unit/widget tests does not establish that all deployed UI flows work end to end.
+- Run an authenticated end-to-end call to `model_status`, then submit a valid ten-sample `predict_fault` request against the deployed function (requires a signed-in Firebase user; the local artifact chain is already verified).
+- Verify the reported SUS score against the participant count, questionnaire responses, and calculation records before treating it as a final user-study result (the comparator hard-codes 83.5/54.2 rather than deriving them from collected responses).
+- Complete final browser-level checks of the dashboard, since passing Flutter unit/widget tests does not establish that all deployed UI flows work end to end.
+- Optional extension (out of proposal scope): retrain with fault-type labels or forecasting heads if the system should analyse more than binary fault anticipation.
 
 ## Deployment Answer
 

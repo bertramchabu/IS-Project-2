@@ -51,9 +51,12 @@ model/
 | **Adaptive Load Reduction** | 90% load savings when prob $< 30\%$ | **Implemented & Active** | **PASSED** |
 
 The stored comparative results report baseline F1 **0.9308** and BiLSTM F1
-**0.8593**. The model meets its standalone F1 target, but those figures do not
-show that it outperforms the baseline on F1. Reproduce and reconcile the
-comparison before presenting it as a model F1 improvement.
+**0.8593** (reproduced by `py -m src.baseline_comparator` on 30 October 2026).
+The model meets its standalone F1 target, but those figures do not show that
+it outperforms the baseline on F1: the baseline is scored row-level while the
+BiLSTM is scored on 10-sample windows and fires before thresholds are crossed
+(see `f1_comparison_note` in `results/comparative_evaluation.json`). Present
+lead time, false-alert rate, and usability as the comparison axes, not raw F1.
 
 ---
 

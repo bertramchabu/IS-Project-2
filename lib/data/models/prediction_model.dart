@@ -15,6 +15,7 @@ class PredictionModel {
   final String triggeredBy;
   final String? operationalStatus;
   final String? message;
+  final bool alertTriggered;
   final int? computationalSavingsPercent;
   final double? nextSamplingIntervalSeconds;
   final double? modelF1Score;
@@ -34,6 +35,7 @@ class PredictionModel {
     required this.triggeredBy,
     this.operationalStatus,
     this.message,
+    this.alertTriggered = false,
     this.computationalSavingsPercent,
     this.nextSamplingIntervalSeconds,
     this.modelF1Score,
@@ -64,6 +66,8 @@ class PredictionModel {
       triggeredBy: d['triggeredBy'] as String? ?? 'BiLSTM Inference',
       operationalStatus: d['status'] as String?,
       message: d['message'] as String?,
+      alertTriggered: d['alertTriggered'] as bool? ??
+          ((d['faultProbability'] as num?)?.toDouble() ?? 0) >= 0.70,
       computationalSavingsPercent:
           (d['computationalSavingsPercent'] as num?)?.toInt(),
       nextSamplingIntervalSeconds:

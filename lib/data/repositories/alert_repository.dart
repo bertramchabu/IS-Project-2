@@ -1,8 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/alert_model.dart';
+import '../models/prediction_model.dart';
 
 class AlertRepository {
   final FirebaseFirestore _firestore;
+
+  /// FR-AS-05: duplicate alerts for the same node and severity within this
+  /// window are suppressed instead of re-inserted.
+  static const duplicateSuppressionWindow = Duration(minutes: 5);
 
   AlertRepository({FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
@@ -116,6 +121,53 @@ class AlertRepository {
         .doc(nodeId)
         .collection('alerts')
         .doc(alertId);
+  }
+
+  /// FR-AS-01/03/04: Persist an alert for a prediction whose BiLSTM callable
+  /// response triggered one. Returns the new alert id, or null when a
+  /// duplicate Active alert for the same node and severity already exists
+  /// inside the suppression window (FR-AS-05).
+  Future<String?> raiseAlertFromPrediction(PredictionModel prediction) async {
+    final nodeId = prediction.nodeId;
+    final severityId = prediction.severity.severityId;
+
+    // Uses the declared severityId + createdAt collection index; the status
+    // check happens in memory to avoid needing a three-field composite.
+    final recent = await _firestore
+        .collection('networkNodes')
+        .doc(nodeId)
+        .collection('alerts')
+        .where('severityId', isEqualTo: severityId)
+        .where(
+          'createdAt',
+          isGreaterThan: Timestamp.fromDate(
+            DateTime.now().subtract(duplicateSuppressionWindow),
+          ),
+        )
+        .limit(20)
+        .get();
+    final duplicate = recent.docs.any(
+        (doc) => (doc.data()['status'] as String?) == 'Active');
+    if (duplicate) return null;
+
+    final doc = await _firestore
+        .collection('networkNodes')
+        .doc(nodeId)
+        .collection('alerts')
+        .add({
+      'nodeId': nodeId,
+      'predictionId': prediction.predictionId,
+      'severityId': severityId,
+      'status': 'Active',
+      'title': 'Predicted fault on $nodeId',
+      'description': prediction.message ??
+          'BiLSTM fault probability ${prediction.probabilityPercent} '
+              'exceeded the alert threshold.',
+      'faultProbability': prediction.faultProbability,
+      'modelVersionId': prediction.modelVersionId,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    return doc.id;
   }
 
   String _statusId(AlertStatus status) {

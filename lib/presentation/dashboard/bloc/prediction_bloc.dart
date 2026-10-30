@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../data/repositories/alert_repository.dart';
 import '../../../data/repositories/prediction_repository.dart';
 import '../../../data/repositories/model_inference_repository.dart';
 import 'prediction_event.dart';
@@ -9,14 +10,16 @@ import 'prediction_state.dart';
 class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
   final PredictionRepository _repo;
   final ModelInferenceRepository _modelRepo;
+  final AlertRepository? _alerts;
 
   StreamSubscription? _firestoreSub;
   String? _activeNodeId;
   String? _lastSampleKey;
   DateTime? _nextInferenceAllowedAt;
 
-  PredictionBloc(this._repo, this._modelRepo)
-      : super(const PredictionInitial()) {
+  PredictionBloc(this._repo, this._modelRepo, {AlertRepository? alerts})
+      : _alerts = alerts,
+        super(const PredictionInitial()) {
     on<PredictionStarted>(_onStarted);
     on<PredictionMetricsReceived>(_onMetricsReceived);
     on<PredictionFirestoreUpdated>(_onFirestoreUpdated);
@@ -130,6 +133,13 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
       _nextInferenceAllowedAt = DateTime.now().add(
         Duration(milliseconds: (nextInterval * 1000).round()),
       );
+      if (prediction.alertTriggered && _alerts != null) {
+        try {
+          await _alerts!.raiseAlertFromPrediction(prediction);
+        } catch (error, stackTrace) {
+          _logModelError('Failed to persist triggered alert', error, stackTrace);
+        }
+      }
       emit(PredictionLoaded(
         prediction,
         modelApiOnline: true,

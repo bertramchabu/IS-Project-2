@@ -151,6 +151,7 @@ class ModelInferenceRepository {
       triggeredBy: 'Firebase BiLSTM Function',
       operationalStatus: prediction['status'] as String?,
       message: prediction['message'] as String?,
+      alertTriggered: prediction['alert_triggered'] == true,
       computationalSavingsPercent:
           _optionalDouble(prediction['computational_savings_percent'])?.round(),
       nextSamplingIntervalSeconds:

@@ -181,7 +181,16 @@ def run_comparative_evaluation():
     comp_summary = {
         "baseline_threshold_system": baseline_results,
         "netvision_ai_bilstm": netvision_results,
-        "f1_improvement": f"+{((netvision_results['f1_score'] - baseline_results['f1_score']) / baseline_results['f1_score']):.1%}",
+        "f1_improvement": f"{((netvision_results['f1_score'] - baseline_results['f1_score']) / baseline_results['f1_score']):+.1%}",
+        "f1_comparison_note": (
+            "The baseline is scored row-level: it alerts when a metric is "
+            "already past its static threshold, which coincides with rows "
+            "labelled as faults, inflating its F1. The BiLSTM is scored on "
+            "10-sample sliding windows and fires before thresholds are "
+            "crossed, so its anticipations are penalised as errors against "
+            "row labels. The fair comparison is lead time, anticipation "
+            "window, false-alert rate, and usability, not raw F1."
+        ),
         "detection_speedup": f"{(baseline_results['avg_detection_latency_sec'] / netvision_results['avg_detection_latency_sec']):.1f}x faster",
         "false_alarm_reduction": f"-{((baseline_results['false_alert_rate'] - netvision_results['false_alert_rate']) / baseline_results['false_alert_rate']):.1%}"
     }
