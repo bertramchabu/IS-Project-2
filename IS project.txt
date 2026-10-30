@@ -1,0 +1,822 @@
+An AI-Powered Network Monitoring Dashboard with Intelligent Fault Anticipation
+
+
+
+
+
+
+
+
+Chabu Bertram Brain
+166458
+BBIT 4C
+
+
+
+
+Supervisor Name
+Dr. Paul Macharia
+
+
+
+
+
+
+
+An Information System Project Proposal Submitted to the School of Computing and Engineering Sciences in Partial Fulfillment of the Requirements for the Award of a Degree of Bachelor of Business in Information Technology
+
+
+
+School of Computing and Engineering Sciences
+Strathmore University
+Nairobi, Kenya
+ May 2026
+Declaration and Approval
+I declare that this work has not been previously submitted and approved for the award of a degree by this or any other University. To the best of my knowledge and belief, the research proposal contains no material previously published or written by another person except where due reference is made in the research proposal itself.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Student Name:        	Chabu Bertram Brian
+Admission Number:    166458
+Student Signature:  	_________________________ Date: ________________________
+  
+ 
+The Proposal of Chabu Bertram Brian was reviewed and approved by Dr. Paul Macharia
+Supervisor Signature:  _________________________ Date: _______________________
+
+
+
+
+Acknowledgement
+The acknowledgement for thesis/proposal is the section where you thank all people, institutions, and companies that helped you complete the project successfully. It is like a dedication, except for the fact that it is formal. Also, you do not need to mention every single person who helped you with the research - just those who were most important to your research. For example, you do not need to thank your partner for making you dinner as you worked on the project.
+Note: You may remove this section if not applicable, but in most cases, it is applicable when writing your full documentation. But this is completely up to you to decide.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Abstract
+Network downtime in critical infrastructure environments poses significant economic and operational risks, with enterprises facing substantial losses per hour of disruption. Traditional network monitoring systems remain predominantly reactive, relying on threshold-based alerts that trigger only after service degradation has occurred [1]. This research proposes NetVision AI, an intelligent network monitoring dashboard that integrates a Bidirectional Long Short-Term Memory (BiLSTM) neural network with a responsive Flutter-based user interface to enable proactive fault anticipation [2]. The study aims to achieve three primary objectives: first, to develop a dashboard with interactive map layers and real-time KPI graphs refreshing at one-second intervals; second, to train a BiLSTM model achieving an F1-score of at least 0.85 and RMSE not exceeding 0.10 using multivariate network metrics [3]; third, to implement an adaptive alert mechanism that generates notifications within two seconds of fault detection while reducing computational load by 90% during normal network conditions [4]. The methodology adopts a prototyping approach, encompassing requirements gathering, iterative design, user evaluation, and systematic testing. The BiLSTM architecture is selected for its ability to capture temporal dependencies in both forward and backward directions, making it particularly suitable for detecting fault precursors distributed across time-series data [5]. Evaluation will compare NetVision AI against conventional threshold-based systems using prediction accuracy, detection latency, and the System Usability Scale [6]. This research addresses a critical gap in African network management literature, offering a proactive, resource-efficient solution for infrastructure reliability.
+
+Keywords: Network monitoring, fault anticipation, BiLSTM, predictive maintenance, Flutter, dashboard usability, alert fatigue
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Table of Contents
+Declaration and Approval	2
+Acknowledgement	3
+Abstract	4
+Table of Contents	5
+List of Figures	8
+List of Tables	9
+List of Abbreviations	10
+Chapter One: Introduction	11
+1.1 Background Information	11
+1.2 Problem Statement	12
+1.3 Objectives	13
+1.3.1 General Objective	13
+1.3.2 Specific Objectives	13
+1.4 Research Questions	13
+1.5 Justification	14
+1.6 Scope	14
+1.7 Limitations and Delimitations	15
+Limitations	15
+Delimitations	15
+Chapter 2: Literature Review	16
+2.1 Introduction	16
+2.2 Evolution and Current State of Network Monitoring Systems	16
+2.2.1 Traditional Reactive Monitoring Approaches	16
+2.2.2 Proactive Maintenance Paradigm	17
+2.3 Artificial Intelligence for Network Fault Anticipation	17
+2.3.1 Time-Series Learning Models	17
+2.3.2 Bidirectional LSTM (BiLSTM) for Fault Anticipation	17
+2.3.3 Alternative AI Approaches for Network Monitoring	18
+2.4 Dashboard Design for Network Management	18
+2.4.1 User-Centred Design Principles	18
+The System Usability Scale (SUS) remains a widely used instrument for assessing perceived usability, with scores above 68 generally interpreted as above average and scores above 80 indicating excellent usability (Tziakouris & Al-Fardan, 2025).	19
+2.4.2 Visualization for Network Time-Series Data	19
+2.4.3 Alerting Mechanisms and Human Factors	19
+2.4.4 Usability Evaluation Methods	20
+2.5 Review of Existing AI-Integrated Network Monitoring Systems	20
+2.5.1 Real-Time Edge-Deployed Anomaly Detection	20
+2.5.2 Predictive FRER Activation in Time-Sensitive Networks	20
+2.5.3 Graph-Based Multivariate Time Series Anomaly Detection	20
+2.5.4 Network Datasets for Model Training	21
+2.5.5 Cognitive Fatigue and Human Factors in Monitoring	21
+2.5.6 Limitations of Existing Solutions	21
+2.6 Identified Research Gaps	21
+2.7 Conceptual Framework	22
+2.8 Summary	23
+Chapter 3: Methodology	24
+3.1 Introduction	24
+3.2 Research and Development Methodology	24
+3.2.1 Choice and Justification of Methodology	24
+3.2.2 Phase 1: Requirements Gathering	25
+3.2.3 Phase 2: Quick Design	25
+3.2.4 Phase 3: User Evaluation of Initial Prototype	26
+3.2.5 Phase 4: Refining Prototype	26
+3.2.6 Phase 5: Implement and Test (Final Prototype)	26
+3.3 Deliverables	27
+3.4 Tools and Techniques	27
+3.5 Ethical Considerations	28
+3.6 Summary	28
+Chapter 4: System Analysis and Design	28
+4.1 Introduction	28
+4.2 Requirement Analysis	29
+4.2.1 Functional Requirements	30
+4.2.2 Non-Functional Requirements	33
+4.3 System Design Diagrams	36
+4.3.1 Use Case Diagram	36
+4.3.2 Class Diagram	37
+4.3.3 Sequence Diagrams	39
+4.3.4 Entity-Relationship Diagram	42
+4.3.5 Database Schema	45
+4.3.6 User Interface Design (Wireframes)	47
+4.4 Summary	53
+References	54
+Appendices:	56
+Appendix 1: Gantt Chart	56
+
+
+
+
+
+
+
+List of Figures
+Figure 1 Conceptual Framework for NetVision AI	22
+Figure 2 Prototyping Methodology Phases for NetVision AI	24
+Figure 3 NetVision AI Use Case Diagram	37
+Figure 4 NetVision AI Class Diagram – Users, Roles and Reporting	38
+Figure 5 NetVision AI Class Diagram – Monitoring, Prediction and Alerting	39
+Figure 6 Sequence Diagram for Normal Prediction Flow	40
+Figure 7 Sequence Diagram for Alert Flow	40
+Figure 8 Sequence Diagram  for UI Interaction & Business Logic	41
+Figure 9 Sequence Diagram  for Audit Logging & Confirmation	42
+Figure 10 Sequence Diagram for Report Generation	43
+Figure 11  Identity & Access Domain Entity-Relationship Diagram	44
+Figure 12 Infrastructure Domain Entity Relationship Diagram	45
+Figure 13 Metrics Domain Entity Relationship Diagram	45
+Figure 14 Prediction & Alerting Domain Entity Relationship Diagram	46
+Figure 15 NetVision AI Database Schema – Core Monitoring and Prediction	47
+Figure 16 NetVision AI Database Schema – Users, Roles, Reports and Audit	48
+Figure 17 Dashboard Overview Wireframe	49
+Figure 18 Interactive Map View Wireframe	50
+Figure 19 Alert Management Screen Wireframe	51
+Figure 20 Historical Analysis Screen Wireframe	52
+Figure 21 Report Generation Screen Wireframe	53
+Figure 22  System Administration Screen Wireframe	54
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+List of Tables
+Table 1 Tools and Techniques	26
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+List of Abbreviations
+
+AI – Artificial Intelligence 
+API – Application Programming interface 
+BiLSTM – Bidirectional Long Short-Term Memory 
+CNN – Convolutional Neural Network 
+CSV – Comma-Separated Values 
+FRI - Fatigue Risk Index 
+GNN – Graph Neural Network 
+HRO - High-Reliability Organization
+IOT - Internet of Things 
+KPI - Key Performance Indicator
+LSTM - Long Short-Term Memory
+ML – Machine Learning 
+MTS – Multivariate Time Series 
+NOC – Network Operations Centre
+REST – Representational State Transfer
+RMSE – Root Mean Square Error
+SOC – Security Operations Scale 
+SUS – System Usability Scale 
+TSN – Time- Sensitive Networking 
+UI – User Interface 
+
+
+
+
+
+
+
+Chapter One: Introduction
+1.1 Background Information 
+In contemporary enterprise networks and cloud-based infrastructures, maintaining continuous and reliable network operation has become paramount to organizational success. Issues such as undetected performance degradation, hardware failures, and routing anomalies can precipitate substantial financial losses, data breaches, and significant operational slowdowns. Research by (Albattat, Albaker, & Alsaedi, 2025) demonstrates that AI and IoT-powered smart maintenance methods have revolutionized industrial application domains, yet network management has lagged in adopting these advances. Traditional monitoring solutions predominantly employ reactive alerting mechanisms that trigger only after service interruptions have occurred compelling network administrators to engage in remedial actions post-failure.
+Recent work by (Azeta, et al., 2025) provides a comprehensive review of artificial intelligence and robotics in predictive maintenance, highlighting that deep learning architectures have transformed how faults are anticipated across industrial systems. Among these architectures, Bidirectional Long Short-Term Memory (BiLSTM) networks have demonstrated superior capability in capturing complex temporal dependencies within sequential data by processing information in both forward and reverse directions. (Jiang, 2025) propose an AI agent-enabled predictive maintenance framework that serves as a conceptual foundation for intelligent monitoring systems, emphasizing the importance of real-time fault anticipation.
+The security risks associated with network anomalies have intensified due to the exponential growth of connected devices across smart homes, healthcare, and industrial control systems. Research by (Mishra, Tripathi, & Sharma, 2026) presents a hybrid Convolutional Neural Network and Bidirectional Long Short-Term Memory (CNN+BiLSTM) framework for real-time anomaly detection, specifically designed for edge deployment on resource-constrained devices. This framework demonstrates that lightweight temporal models can achieve effective anomaly detection without excessive computational overhead.
+Network operations teams across Africa remain predominantly constrained to reactive incident response models. The Communications Authority of Kenya has documented rapid growth in network-dependent infrastructure, including mobile money platforms and digital government services, yet local research on automated, predictive monitoring systems remains significantly underdeveloped. (Hornyak, 2026) demonstrates that LSTM networks effectively capture temporal failure patterns in multivariate sensor data, achieving strong predictive capability across both individual and aggregated machine groups. NetVision AI addresses this gap through an intelligent dashboard leveraging Flutter for front-end responsiveness and a BiLSTM neural network for predictive analytics, synthesizing diverse data streams to identify potential faults before service disruption occurs.
+1.2 Problem Statement
+Network downtime in critical infrastructure environments—including telecommunications, industrial automation, and smart city systems—presents substantial economic and safety risks. Contemporary research identifies three interrelated gaps that collectively undermine network reliability in mission-critical deployments.
+First, traditional monitoring tools cannot analyse multivariate time-series data in a collective, integrated manner. (Sheng He, 2026) addresses this challenge through graph-based dual-contrastive representation learning for multivariate time series anomaly detection, demonstrating that capturing both temporal and inter-variable dependencies is essential for accurate fault identification. Studies on metrics including latency, jitter, packet loss, retransmission rates, and signal strength are conducted independently, which impedes the detection of degradation trends prior to complete failure. This siloed analytical approach means administrators observe individual metrics crossing predetermined thresholds but fail to recognize synergistic relationships until after actual faults have occurred.
+Second, poor dashboard design directly compromises administrator performance during critical incidents. (Tziakouris & Al-Fardan, 2025) propose a comprehensive cognitive fatigue detection system for mission-critical operational environments including NOCs and SOCs, documenting that sustained vigilance demands lead to cognitive overload, delayed threat detection, and dismissal of legitimate alerts. Their research demonstrates that after six hours of continuous monitoring, analyst response time slows by over 35%, with eye-tracking revealing prolonged fixations and reduced engagement. Ineffective visualization reduces user satisfaction, focus, and situational control during time-sensitive troubleshooting, causing delayed incident response.
+Third, static fault-tolerance mechanisms impose unnecessary computational overhead. (Catalin, 2026) present deep neural network-based fault diagnosis for predictive maintenance, demonstrating that adaptive inference mechanisms can significantly reduce computational waste. Existing systems maintain continuous monitoring and alerting activity irrespective of network health status, consuming substantial bandwidth overhead even under nominal conditions. (Soliman, Mikkelesen, & and Seljåsen) examine the battle between mindfulness and mindlessness in Security Operations Centres, revealing that analysts face 50% to 90% false positive alerts, leading to desensitization and cognitive overload that raises the risk of successful attacks.
+Consequently, network administrators can only identify issues after service delivery interruption has occurred. (Workato, 2025) reports that SOC teams face an average of 3,832 alerts daily, with 62 percent being entirely ignored. Post-failure identification causes economic losses, security vulnerabilities in industrial control systems, and organizational inefficiency. Until organizations acquire tools enabling proactive fault identification without resource wastage during normal operations, unnecessary downtime will persist.
+1.3 Objectives
+1.3.1 General Objective
+To design, develop, and evaluate NetVision AI, an intelligent network monitoring dashboard that integrates BiLSTM-based fault anticipation with a responsive user interface to enable proactive network management.
+1.3.2 Specific Objectives
+i.	To build a responsive web-based dashboard employing Flutter and Bloc architecture which provides interactive map layers and refreshes three live KPI graphs (latency, jitter, packet loss) every second.
+ii.	To train and validate a lightweight BiLSTM model using multi-dimensional time series data consisting of five network KPIs (latency, jitter, packet loss, retransmission rates, signal strength) to obtain a fault prediction F1-score equal to or greater than 0.85 with RMSE less than or equal to 0.10 on held-out test data.
+iii.	To implement the BiLSTM model on the built dashboard with an adaptive fault detection threshold default value of 70 percent, such that the system generates visual and audio alerts within two seconds of threshold passage and reduces the prediction rate by 90 percent when fault probability is under 30 percent.
+iv.	To assess NetVision AI relative to baseline threshold-based monitoring software through fault prediction F1-score (target 0.85 versus 0.50), average detection time for faults (target two seconds versus 30 seconds), and average System Usability Scale score obtained from administrators.
+1.4 Research Questions
+i.	What is the strategy for building a responsive dashboard with interactive map layers and live KPI charts using Flutter and Bloc state management that would ensure one-second refresh intervals?
+ii.	What would be the approach for training and validating a lightweight BiLSTM model using multivariate network KPIs to provide at least 0.85 F1-score and no more than 0.10 RMSE for fault prediction purposes?
+iii.	How can the developed predictive algorithm be incorporated into the dashboard to produce an alert within two seconds of threshold violation and decrease computational effort by ninety percent under normal conditions?
+iv.	In what way does the performance of the NetVision AI platform compare with conventional threshold-based fault anticipation regarding F1-score, detection time, and usability?
+1.5 Justification
+The rationale for conducting this study lies in the urgent need for proactive network maintenance across African digital infrastructures. (Albattat, Albaker, & Alsaedi, 2025) systematically review AI and IoT-powered smart maintenance methods, documenting that predictive approaches reduce downtime by approximately 50% across industrial applications. (Workato, 2025) further reports that large operations teams process thousands of alerts daily, demonstrating the operational burden created by reactive monitoring models.
+A practical AI-based solution can be designed, evaluated, and implemented in this context. Research by (AlertOps, 2025) demonstrates that organizations implementing AI-driven alert management reduce noise by 70% for global NOCs, significantly improving analyst effectiveness. The edge-cloud hybrid architecture documented by (Storey, 2025) achieves latency reductions up to 35 percent, energy savings of 28 percent, and bandwidth consumption reductions of 60 percent relative to purely cloud-based approaches.
+Empirical evidence supports the effectiveness of user-centred dashboards on administrator performance. (Tziakouris & Al-Fardan, 2025) validate that context-aware fatigue monitoring systems improve operational readiness and reduce human error in high-stakes environments. The System Usability Scale (SUS) remains a widely accepted instrument for assessing perceived usability in information systems.
+According to the (Communications Authority of Kenya, 2023), network-dependent infrastructure continues to grow rapidly, with cloud services, mobile money applications, and digital government becoming increasingly prevalent. However, studies on AI network monitoring remain absent from local literature, leaving a knowledge gap that this research aims to address.
+1.6 Scope 
+The project will entail designing, developing, and evaluating NetVision AI, an intelligent dashboard for web-based network management. The platform will collect network KPIs consisting of latency, jitter, packet loss, retransmission rates, and signal strength as multivariate time series to predict fault probability. Prediction will be performed using a BiLSTM neural network algorithm on simulated network fault data due to limited access to live data arising from security and confidentiality requirements.
+The dashboard will be implemented using the Flutter platform based on Bloc architecture for state management. Interactive map layers for geographical visualization, real-time KPI graphs with one-second updates, and configurable alert functionality are included in the implementation. Evaluation will cover fault anticipation accuracy (F1-score and RMSE), improved response times, and ease of use (System Usability Scale).
+Physical network hardware integration will not be considered in the process. Network data stream simulation or import from existing logs (CSV files or API streams from simulated environments) will be used. Remediation steps such as restarting services or rerouting traffic are strictly excluded from scope.
+1.7 Limitations and Delimitations 
+Limitations 
+The BiLSTM model’s prediction accuracy depends on the quality and availability of labelled network fault datasets, which may be limited or require synthetic generation (Azeta, et al., 2025) . Real-time network data streaming may be constrained by institutional network policies or data access restrictions. Usability testing will involve a limited number of administrators due to time constraints, which may not fully represent all user populations (Soliman, Mikkelesen, & and Seljåsen).
+Delimitations
+The study will focus on five key network KPIs and will not include other metrics such as bandwidth utilization or device CPU load (Sheng He, 2026). The predictive model will be designed for fault anticipation only, not performing automated remediation or fault correction (Jiang, 2025). The system will be evaluated in a simulated or controlled environment, not on a live revenue-critical production network. Development will prioritize web-based deployment, with native mobile features considered out of scope for this phase.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Chapter 2: Literature Review
+2.1 Introduction 
+The literature review in this chapter presents a thorough assessment of literature pertaining to the design, development, and evaluation of AI-based intelligent network monitoring systems. This chapter begins with a discussion of network monitoring systems and their evolution from purely reactive to more proactive approaches. An assessment of how artificial intelligence, particularly time series learning algorithms like LSTM and BiLSTM, has been applied to network fault detection and prediction is presented. Literature on the design and usability aspects of network dashboards is critically evaluated. Following this, a review of available AI-enabled network monitoring systems and their limitations is discussed. This chapter concludes with a conceptual framework derived from the literature review. 
+2.2 Evolution and Current State of Network Monitoring Systems
+2.2.1 Traditional Reactive Monitoring Approaches 
+Network monitoring has historically been a reactive field. Conventional systems including SNMP-enabled tools, Nagios, Zabbix, and Cacti primarily rely on threshold-based alerting mechanisms. (Albattat, Albaker, & Alsaedi, 2025) document that while these systems gather required information periodically and evaluate collected data against predefined thresholds, this approach has inherent drawbacks including inability to adapt to dynamic network conditions and failure to capture complex interdependencies between metrics. 
+The most evident weakness is that threshold monitoring only recognizes failure after it has occurred. (Azeta, et al., 2025) note that by the time metrics reach threshold levels, service performance degradation may already have been experienced by customers. (Workato, 2025) similarly highlights high alert volumes in operations centres, indicating that reactive workflows can overwhelm analysts and delay effective response. 
+Furthermore, static thresholds cannot adapt to dynamic network and traffic patterns. (Sheng He, 2026) demonstrates that quasi-periodic network time series consist of complex interdependencies that cannot be observed using single-parameter analysis alone, requiring advanced multivariate approaches for effective anomaly detection.
+2.2.2 Proactive Maintenance Paradigm 
+The drawbacks of reactive monitoring have motivated researchers to explore proactive maintenance methods. (Jiang, 2025) propose an AI agent-enabled predictive maintenance framework where faults are identified before they lead to service interruptions. Their framework emphasizes the integration of intelligent agents that continuously learn from operational data to anticipate failures.
+(Hornyak, 2026) presents an LSTM approach for fault prediction using multivariate time-series sensor data, demonstrating that deep learning models can effectively capture temporal failure patterns. The study utilizes publicly available predictive maintenance datasets and achieves outstanding accuracy in certain configurations, confirming strong predictive capability across both individual and aggregated machine groups.
+(Storey, 2025) explores dynamic orchestration of distributed streaming analytics in edge-integrated cloud platforms for real-time event detection, highlighting that edge computing reduces latency and bandwidth consumption while enabling faster response to detected anomalies. This aligns with the proactive maintenance paradigm where computational resources are distributed to enable real-time fault anticipation.
+2.3 Artificial Intelligence for Network Fault Anticipation 
+2.3.1 Time-Series Learning Models 
+Time series analysis is common practice in network monitoring. Metrics including latency, jitter, and packet loss are collected sequentially, forming multivariate time series. (Mishra, Tripathi, & Sharma, 2026) present a real-time edge-deployed LSTM framework for IoT botnet and DDoS anomaly detection, demonstrating that deep learning methods, particularly LSTM architectures, can effectively process sequential data for anomaly identification. Their system uses MQTT to ingest live network traffic, preprocesses feature in real time and applies learned models to locally identify anomalies. 
+(Catalin, 2026) present deep neural network-based fault diagnosis using CNN architectures operating on 2D time-feature representations of multivariate signals, achieving 92.31% accuracy on holdout validation. This demonstrates that deep learning approaches can effectively classify multiple fault types under varying operating conditions.
+(Sheng He, 2026) introduces GDCMAD, a graph-based dual-contrastive representation learning method for multivariate time series anomaly detection. The method constructs relational graphs for capturing inter-variable and temporal dependencies, integrating an improved Kolmogorov-Arnold network-based attention mechanism into a reconstruction framework with an LSTM-based external contrastive learning module. Experimental results across six public datasets show superior anomaly detection performance compared to nine state-of-the-art methods. 
+2.3.2 Bidirectional LSTM (BiLSTM) for Fault Anticipation 
+Recent research has established BiLSTM as a highly effective architecture for fault anticipation in time-sensitive networks. The MDPI study on BiLSTM-based fault anticipation for predictive activation of FRER (Seliem, 2025) provides comprehensive evidence that BiLSTM networks, by processing sequences in both forward and reverse directions, enable inclusion of both past and future context into each hidden state. This bidirectional processing is particularly valuable for fault anticipation since fault indications may be present both before and after the examined time point. 
+The study demonstrates that BiLSTM-based models perform better than traditional statistical models and other LSTM-based techniques in fault anticipation, improving the timing and reliability of redundancy activation in time-critical industrial networks. The model proves particularly effective at identifying faults with gradual onset whose precursors are distributed throughout a time interval rather than concentrated immediately before fault occurrence.
+(Tang, 2026) introduces VAML-Net, a composite architecture for unsupervised anomaly detection within multivariate time series using variational autoencoder and multiresolution LSTM, specifically tailored to heterogeneous data and distributed network environments. The work proposes methods that adapt to inherent non-stationarity and noise present in real-world time series data. 
+2.3.3 Alternative AI Approaches for Network Monitoring 
+While BiLSTM has been selected as the neural network model for this research, various AI techniques have been applied to network monitoring and fault detection. (Mishra, Tripathi, & Sharma, 2026) utilize CNN+BiLSTM hybrid frameworks for real-time anomaly detection, demonstrating that combining convolutional feature extraction with bidirectional temporal processing enhances detection accuracy.
+(Catalin, 2026) demonstrate that CNN architectures operating on 2D time-feature representations achieve strong fault classification performance (92.31% accuracy), though these are less efficient at detecting long-range temporal dependencies than recurrent networks.
+(Sheng He, 2026) present graph neural network approaches for multivariate time series anomaly detection, constructing relational graphs that capture both temporal dependencies and inter-variable interactions. This represents an emerging direction for network monitoring that incorporates topological information. 
+BiLSTM stands out as the optimal choice for NetVision AI, providing appropriate balance between performance and efficiency, demonstrating proven effectiveness in forecasting faults from time series data, and enabling lightweight model deployment for real-time inference (Tang, 2026). 
+2.4 Dashboard Design for Network Management 
+2.4.1 User-Centred Design Principles
+Beyond prediction quality, any monitoring system’s effectiveness depends substantially on how well analysis results are conveyed to human administrators. (Tziakouris & Al-Fardan, 2025) emphasize that ineffective visualization can undermine advantages even from sophisticated machine learning algorithms, proposing a comprehensive system that fuses cognitive load analytics with real-time behavioural telemetry.
+(Soliman, Mikkelesen, & and Seljåsen) examine the battle between mindfulness and mindlessness in SOCs, revealing that user-centred design principles significantly impact analyst effectiveness. Their research identifies that SOCs as High-Reliability Organizations require characteristics including preoccupation with failure, reluctance to simplify interpretations, sensitivity to operations, commitment to resilience, and deference to expertise.
+(AlertOps, 2025) documents that organizations implementing intelligent dashboard designs with contextual alert information reduce noise by 70% and improve mean time to resolution by 35%, demonstrating the critical importance of user-centred design in monitoring systems.
+The System Usability Scale (SUS) remains a widely used instrument for assessing perceived usability, with scores above 68 generally interpreted as above average and scores above 80 indicating excellent usability (Tziakouris & Al-Fardan, 2025).
+2.4.2 Visualization for Network Time-Series Data 
+Time series data pose unique visualization challenges. Metrics fluctuate rapidly over time, typically exhibiting high dimensionality (numerous metrics per node) and high cardinality (numerous nodes). The Cote Network Logger package (Cote Network Logger, 2025) demonstrates modern approaches to real-time HTTP network monitoring with web dashboards, featuring glass-morphism design, real-time WebSocket updates, complete request/response views, and advanced filtering capabilities—serving as a reference for contemporary dashboard design patterns.
+(Storey, 2025) discusses visualization requirements for edge-integrated cloud platforms, emphasizing that real-time event detection systems require rapid updating displays (one-second intervals for critical metrics), consistent colour schemes, and display of both absolute values and trend information.
+2.4.3 Alerting Mechanisms and Human Factors 
+Alerting involves notifying administrators of detected or predicted problems through monitoring systems. (Workato, 2025) reports that SOC teams face an average of 3,832 alerts per day, with 62 percent being ignored entirely. This phenomenon, termed alert fatigue, occurs when excessive alerts requiring no action desensitize administrators to genuine threats.
+(Tziakouris & Al-Fardan, 2025) demonstrate that after six hours of continuous monitoring, analyst response time slows by over 35%, with eye-tracking revealing prolonged fixations and reduced saccadic movement. Their proposed system computes a Fatigue Risk Index (FRI) using multi-modal data models, fusing biometric signals with system activity trends to issue intelligent alerts and suggest task rotation. 
+(Soliman, Mikkelesen, & and Seljåsen) reveal that analysts employ “mindful balancing” tactics to alternate between mindfulness and mindlessness to manage demanding work, noting that 50% to 90% of alerts are false positives, leading to a state of desensitization that raises the risk of successful attacks. 
+Alert effectiveness can be significantly improved through context-aware design. (AlertOps, 2025) demonstrates that dashboards providing alert severity signals, cause information, and suggested actions enable faster, better responses compared to systems lacking such context. 
+2.4.4 Usability Evaluation Methods 
+The System Usability Scale (SUS) remains one of the most widely used instruments for evaluating perceived usability in information systems. It comprises ten statements rated on a five-point Likert scale, producing overall scores between 0 and 100. The scale has been validated across numerous information system domains, including network monitoring dashboards.
+2.5 Review of Existing AI-Integrated Network Monitoring Systems
+2.5.1 Real-Time Edge-Deployed Anomaly Detection 
+(Mishra, Tripathi, & Sharma, 2026) present a real-time edge-deployed LSTM framework for anomaly detection, specifically designed for edge deployment on resource-constrained devices like Raspberry Pi. The system uses MQTT to ingest live network traffic, preprocesses feature in real time and applies learned models to locally identify anomalies. A Streamlit-based dashboard provides visual representation of identified threats. The multi-phase implementation includes robust data preprocessing, model training with class imbalance handling and hyperparameter optimization, and real-time inference at the edge. Standard IoT datasets including UNSW-NB15 and BoT-IoT are used for evaluation.
+2.5.2 Predictive FRER Activation in Time-Sensitive Networks 
+The comprehensive study on BiLSTM-based fault anticipation for predictive activation of FRER (Seliem, 2025) provides strong evidence for anticipatory redundancy strategies. The framework monitors multivariate network performance indicators including latency, jitter, and retransmission rates, applying a BiLSTM model to forecast imminent fault likelihood. FRER is selectively enabled for affected streams when predicted fault scores exceed dynamic thresholds and deactivated upon KPI recovery or timeout expiry. Experimental results demonstrate substantial improvements in link utilization while preserving fault protection, with approximately 40% bandwidth overhead savings under regular conditions. 
+2.5.3 Graph-Based Multivariate Time Series Anomaly Detection
+(Sheng He, 2026) proposes GDCMAD, a graph-based dual-contrastive representation learning method that addresses challenges of limited data representation and insufficient discrimination ability. The method transforms multivariate time series into graph structures from two perspectives (temporal dependency and variable interaction), employs graph neural networks to extract features, and uses contrastive learning to learn richer representations. This represents an emerging approach that combines topological awareness with temporal modelling.
+2.5.4 Network Datasets for Model Training
+Machine learning models for network fault detection require representative datasets for training. (Seliem, 2025) utilize UNSW-NB15 and BoT-IoT datasets for evaluation of their anomaly detection framework. However, (Hornyak, 2026) notes that publicly available datasets often focus on security attacks rather than network faults. For this project, simulated data will be generated to train the BiLSTM model due to limited access to production network data with labelled fault events. 
+2.5.5 Cognitive Fatigue and Human Factors in Monitoring 
+(Tziakouris & Al-Fardan, 2025) present a comprehensive system for detecting operator fatigue in mission-critical environments leveraging fusion of cognitive load analytics with real-time behavioural telemetry. The system integrates biometric monitoring (eye movement, facial micro-expressions, heart rate variability) with contextual digital behaviours (keystroke patterns, alert triage timing, application usage entropy, attention-switching dynamics) to provide continuous, adaptive views of operator cognitive state.
+(Soliman, Mikkelesen, & and Seljåsen) contribute the concept of “mindful balancing,” where analysts alternate between mindfulness and mindlessness to manage demanding work in SOCs. Their qualitative investigation across five SOCs reveals that maintaining chronic mindfulness exacts a heavy toll on individual cognitive resources, making security analysts particularly vulnerable to adverse effects of sustained mindfulness.
+2.5.6 Limitations of Existing Solutions
+Several notable challenges persist among existing solutions. First, current solutions concentrate predominantly on prediction-related metrics while treating usability as secondary (Tziakouris & Al-Fardan, 2025). Second, solutions are developed primarily for specific environments, with enterprise network KPI characteristics differing substantially from industrial sensor networks (Seliem, 2025). Third, computational resource management during normal operation is rarely considered (Storey, 2025). Fourth, dashboard development is frequently disregarded during AI-based monitoring system design (Cote Network Logger, 2025). Fifth, research on artificial intelligence for network monitoring in Africa remains absent (Communications Authority of Kenya, 2023). Sixth, existing solutions fail to address cognitive fatigue and human factor challenges that significantly impact monitoring effectiveness (Soliman, Mikkelesen, & and Seljåsen)
+2.6 Identified Research Gaps 
+After critically reviewing current literature, the following research gaps requiring attention through the proposed research are identified:
+Underutilization of synergy between BiLSTM prediction models and user-centred dashboards. Although evidence demonstrates BiLSTM models can be effectively used for fault prediction (Seliem, 2025) and user-centred design principles lead to improved dashboard interaction (Tziakouris & Al-Fardan, 2025), no attempts to integrate these technologies have been identified.
+Lack of resource management techniques for dashboard-integrated AI-based fault detection systems. All currently available solutions implementing AI fault detection involve continuous prediction execution (Mishra, Tripathi, & Sharma, 2026) (Hornyak, 2026).
+Poor evaluation of AI-based monitoring system usability. Most studies provide prediction accuracy measures, but few include standardized usability evaluation within AI-driven monitoring workflows.
+Lack of comparative evaluation relative to traditional methods. Many AIS for network monitoring studies discuss system performance without comparative analysis relative to conventional threshold techniques (Workato, 2025).
+Scarcity of studies for networks within Africa. Most AI for network monitoring research has been conducted in North America, Europe, and East Asia, with few validation studies for African network environments (Communications Authority of Kenya, 2023).
+2.7 Conceptual Framework
+The conceptual framework illustrated in Figure 1 depicts the relationship between independent, dependent, and moderating variables underpinning NetVision AI. The independent variables consist of five multivariate network Key Performance Indicators (KPIs)—latency, jitter, packet loss, retransmission rates, and signal strength—collected as time-series data from the network environment. These metrics serve as primary inputs to the processing mechanism (Sheng He, 2026).
+The processing mechanism comprises two interrelated subsystems. First, the BiLSTM neural network acts as the predictive engine, processing sequential dependencies in forward and backward directions to compute a fault probability score (Tang, 2026). Second, the adaptive threshold controller dynamically adjusts prediction rate based on current fault probability, reducing computational load by 90 percent when probability falls below 30 percent (Storey, 2025). The dependent variable is proactive fault anticipation, measured by prediction accuracy (F1-score ≥ 0.85, RMSE ≤ 0.10), detection time (≤ 2 seconds), and usability (SUS score ≥ 70).
+The framework also acknowledges moderating variables including simulated dataset quality, network administrator experience levels during usability testing (Soliman, Mikkelesen, & and Seljåsen), and institutional network policies affecting data access (Communications Authority of Kenya, 2023). These variables are either controlled (through synthetic data generation) or noted as limitations per Section 1.7.
+ 
+
+ 
+Figure 1 Conceptual Framework for NetVision AI
+2.8 Summary
+This chapter has presented a comprehensive review of literature on network monitoring evolution, AI techniques for fault anticipation, and dashboard design principles. Traditional reactive monitoring approaches were contrasted with proactive maintenance paradigms (Albattat, Albaker, & Alsaedi, 2025; Azeta, et al., 2025; Jiang, 2025) BiLSTM was identified as a suitable deep learning architecture for time-series fault prediction due to its bidirectional processing capability. User-centred design principles and their impact on administrator performance were examined (Tziakouris & Al-Fardan, 2025; Soliman, Mikkelesen, & and Seljåsen). Existing AI-integrated monitoring systems were reviewed, revealing limitations including insufficient usability consideration, lack of resource management techniques, absence of cognitive fatigue considerations, and scarcity of African-context studies (Mishra, Tripathi, & Sharma, 2026; Sheng He, 2026; AlertOps, 2025; Storey, 2025). 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+Chapter 3: Methodology
+3.1 Introduction
+This chapter presents the systematic approach and procedures that will be followed to design, develop, and evaluate the NetVision AI system. The chapter begins by justifying the chosen research and development methodology, followed by a detailed discussion of each methodological phase as applied to the project. Subsequently, the deliverables, tools, and techniques employed are specified. The chapter concludes with ethical considerations relevant to the study.
+3.2 Research and Development Methodology
+3.2.1 Choice and Justification of Methodology
+This project adopts the Prototyping Methodology as the primary framework for guiding NetVision AI design and implementation. The Prototyping Methodology was selected based on four considerations supported by recent literature.
+First, the project involves substantial uncertainty regarding BiLSTM model integration with a Flutter-based dashboard, making linear, plan-driven approaches unsuitable (Azeta, et al., 2025). Prototyping enables iterative refinement based on preliminary results from the model training phase. Second, the methodology supports early user feedback through iterative usability evaluations, aligning with user-centred design principles identified in the literature review (Tziakouris & Al-Fardan, 2025). Third, the project has clearly defined but interdependent objectives (the dashboard requires a functional model, while model architecture depends on dashboard refresh constraints), which prototyping manages effectively through successive cycles. Fourth, the risk of delivering an accurate but unusable model is mitigated by producing tangible, testable artifacts early in the development cycle.
+
+ 
+Figure 2 Prototyping Methodology Phases for NetVision AI
+3.2.2 Phase 1: Requirements Gathering
+This phase establishes complete specifications of functional and non-functional requirements for NetVision AI. Requirements definition will be conducted through secondary data sources, consistent with delimitations stated in Section 1.6.
+Specific activities in this phase include: analysis of the problem statement and objectives from Chapter 1 to derive system features; review of related works to identify benchmark requirements for F1-score (≥0.85) and detection time (≤2 seconds) (Tang, 2025); specification of five mandatory KPIs (latency, jitter, packet loss, retransmission rates, signal strength) as identified in Objective II; and documentation of technical constraints including Flutter as the front-end framework and the adaptive threshold mechanism specified in Objective III. The primary output of this phase is a Software Requirements Specification (SRS) document guiding all subsequent phases.
+3.2.3 Phase 2: Quick Design
+The quick design phase focuses on architectural and interface decisions required for constructing the first working prototype. This phase produces three categories of design artifacts: system architecture diagrams, database schema for storing historical KPI data and prediction logs, and initial dashboard interface wireframes including interactive map layers and three live KPI graphs specified in Objective I.
+Design will adhere to the Bloc architecture pattern for Flutter state management to ensure one-second refresh intervals for the three KPI graphs. For the BiLSTM component, design will specify a lightweight architecture comprising an input layer (accepting sequences of five KPIs), two BiLSTM hidden layers (each with 64 units), a dropout layer (rate 0.2 for regularization), and a dense output layer with sigmoid activation producing fault probability between 0 and 1.
+3.2.4 Phase 3: User Evaluation of Initial Prototype
+In this phase, the first working prototype (Prototype V1) will undergo initial evaluation. Due to constraints stated in Section 1.7 (limited administrator access), user evaluation will involve five network administrators from the university’s ICT department, selected through purposive sampling based on their experience with conventional monitoring tools.
+Evaluation will assess two dimensions. First, predictive performance will be measured by feeding a held-out test dataset (20 percent of simulated data, not used for training) through the BiLSTM model and calculating F1-score and RMSE per Objective II. Second, basic usability will be assessed using a pre-test version of the System Usability Scale (SUS) questionnaire focusing on visual alert clarity and KPI graph responsiveness. Feedback from this phase will be documented as a list of required modifications before proceeding to refinement.
+3.2.5 Phase 4: Refining Prototype
+This phase involves iterative improvement of both BiLSTM model and dashboard interface based on user evaluation feedback. Specific refinement activities include hyperparameter tuning of the BiLSTM (adjusting learning rate, batch size, number of epochs) to achieve target F1-score of 0.85 while maintaining RMSE ≤ 0.10; implementation of the adaptive fault detection threshold mechanism (default 70 percent probability for alerts, with prediction rate reduction by 90 percent when fault probability < 30 percent) as required by Objective III (Storey, 2025); enhancement of dashboard visual elements based on SUS feedback (colour schemes, alert positioning, map layer clarity); and optimization of the one-second refresh cycle for KPI graphs to eliminate frame drops or lag.
+The outcome of this phase will be Prototype V2, taken forward for final testing.
+3.2.6 Phase 5: Implement and Test (Final Prototype)
+The final phase constitutes complete implementation and formal testing of NetVision AI. Implementation will involve integrating the refined BiLSTM model (exported as a TensorFlow Lite or ONNX runtime file) with the Flutter dashboard via a REST API or WebSocket connection for real-time predictions.
+Testing will be structured into three categories corresponding to the four objectives. 
+i.	Objective I testing (dashboard responsiveness) will verify that all three KPI graphs refresh within one second using automated UI test scripts. 
+i.	Objective II testing (model accuracy) will compute final F1-score and RMSE on the test dataset and compare against targets. 
+ii.	Objective III testing (alert timing and adaptive prediction) will measure time from threshold violation (fault probability ≥ 70 percent) to visual and audio alert generation and confirm prediction rate reduction by 90 percent when probability falls below 30 percent. 
+iii.	Objective IV testing (comparative evaluation) will compare NetVision AI against a baseline threshold-based monitoring tool (simulated to have F1-score of 0.50 and detection time of 30 seconds) using the same test dataset and a SUS survey completed by the same five administrators.
+3.3 Deliverables
+The following tangible deliverables will be produced from this project:
+i.	Functional Prototype (NetVision AI Dashboard): A fully operational web-based dashboard built with Flutter, capable of ingesting simulated network KPI data, generating BiLSTM-based fault predictions, and displaying results via interactive map layers and real-time graphs.
+ii.	Trained BiLSTM Model File: A serialized lightweight BiLSTM model  achieving F1-score ≥ 0.85 and RMSE ≤ 0.10 on the test dataset, ready for deployment.
+iii.	Simulated Network Dataset: A multivariate time-series dataset containing the five KPIs with labelled fault events, generated for training and evaluation purposes, made available as a CSV file.
+iv.	Comparative Evaluation Report: A document containing quantitative comparison (F1-score, detection time, SUS) between NetVision AI and baseline threshold-based system.
+v.	Source Code Repository: Well-commented source code for the dashboard, model training scripts, and data simulation utilities, hosted on a version control platform.
+3.4 Tools and Techniques
+The following tools and techniques will be employed to implement the methodology:
+Table 1 Tools and Techniques
+Category 	Tool or Technique 	Justification
+Front-end Development	Flutter (web deployment) with Bloc state management	•	Enables one-second UI refresh (Objective I) 
+•	single codebase for web
+Model Development	Python 3.9+ with TensorFlow/Keras	•	Industry standard for BiLSTM
+•	supports lightweight model export
+Data Simulation 	Python (NumPy, Pandas, Scikit-learn	Enables generation of multivariate time-series with controlled fault injection
+Visualization (Model)	Matplotlib, Seaborn	For plotting training loss/accuracy curves and confusion matrices
+API Integration	Fast API (Python) for model prediction	Lightweight REST endpoint for dashboard-model communication
+Version Control	Git (GitHub)	•	Tracks changes
+•	facilitates backup and collaboration
+Testing (Model)	Scikit-learn (metrics: F1-score, RMSE)	Standardized evaluation metrics.
+Testing (UI)	Flutter Driver / Integration tests	Automates verification of one-second refresh cycles
+Usability Evaluation	System Usability Scale (SUS) questionnaire	Validated instrument for perceived usability
+Documentation	Microsoft Word	Ensures consistent formatting and citation management (APA style)
+3.5 Ethical Considerations
+Although the project does not involve human subjects in clinical or social science research contexts (administrators participating in SUS evaluations will provide informed consent with anonymized data), the following ethical guidelines will be observed: 
+(i)	The simulated dataset will not contain any real user or proprietary network information 
+(ii)	Participation in usability testing is voluntary, and participants may withdraw at any time
+(iii)	All citations will be properly attributed to avoid plagiarism
+(iv)	The final report will be submitted to Strathmore University’s ethics review process as required by the School of Computing and Engineering Sciences.
+3.6 Summary
+This chapter has presented the Prototyping Methodology as the framework for developing NetVision AI, justified based on iterative and user-centred project needs. The five phases—requirements gathering, quick design, user evaluation, refinement, and final implementation and testing—were detailed with specific reference to research objectives. Key deliverables including the functional dashboard, trained BiLSTM model, and evaluation report were identified. Finally, tools, techniques, and ethical considerations necessary for successful execution were outlined. 
+Chapter 4: System Analysis and Design
+4.1 Introduction
+This chapter focuses on the analysis and design of NetVision AI, an intelligent network monitoring dashboard, which uses BiLSTM neural networks along with a responsive user interface built using the Flutter framework for the purpose of enabling fault anticipation in the concerned network infrastructures. The chapter starts off with the requirements analysis phase, which entails the study of stakeholder requirements as well as the determination of the functional and non-functional requirements of the system in question. The system design of the application is described using Unified Modelling Language (UML) diagrams, which give insights about the structure, behavior and flow of data within the system. The data storage design of the system makes use of Firebase Firestore, which is a NoSQL document database that allows for native synchronization with Flutter applications. 
+4.2 Requirement Analysis
+The requirement analysis procedure followed for the development of NetVision AI was based on a stakeholder-centric perspective since, in most cases, information systems fail due to assumptions made about the stakeholders’ requirements, rather than understanding them. Considering the criticality and urgency of the network environment, requirements were gathered using the analysis of secondary data, benchmarking against literature, and evaluation of the prototypes by practicing network administrators.
+The main stakeholders for NetVision AI include:
+i.	Network Administrator: The network administrator is the key operator of the system who will be responsible for constant monitoring of the status of the network, detecting any anomaly, and responding to the same. Currently, the network administrators work in a reactive model in which they must respond to threshold-based alerts after the occurrence of service degradation. The success of the network administrator is defined by the reduced mean time to detection, reduced volume of false-positive alerts, and enhanced situational awareness in critical scenarios.
+ii.	ICT Manager: The ICT manager needs a bird’s eye view of network performance trends, alert volumes, and the effectiveness of the system to make informed decisions about infrastructure investments, hiring of personnel, and service level agreements. Performance of this stakeholder will be measured by reduced downtime costs, enhanced reporting ability, and evidence-based decision making.
+iii.	System Administrator: The system administrator takes care of the NetVision AI system by performing activities such as managing the user accounts, training of models, setting up thresholds, and monitoring the overall health of the system. This stakeholder will require administrative activities to manage users, set up system parameters, and get audit logs.
+iv.	Network Infrastructure (External System Actor): The network infrastructure is an actor that is a source of data and external system. Simulated network devices and monitoring endpoints will generate the data streams that will serve as the key performance indicators (KPIs) for the BiLSTM prediction engine.
+v.	BiLSTM Prediction Engine (Internal System Actor): The BiLSTM prediction engine will act as an internal actor that processes multi-variate time series data and generates fault probability scores. This internal actor interacts with other components such as the dashboard, firestore, and alerting system.
+4.2.1 Functional Requirements
+The functional requirements of NetVision AI are arranged according to actors and in accordance with the flow of input-process-output-storage-reporting process. Every requirement has a unique identifier, and the requirements themselves are statements about what each actor needs to do.
+Network Administrator Functional Requirements
+FR-NA-01: The network administrator should authenticate himself on the NetVision AI Dashboard via his login credentials.
+FR-NA-02: The network administrator should access the indicator that represents the status of network health on the dashboard.
+FR-NA-03: The network administrator should observe the layers of interactive maps indicating the geographical location of network nodes and their statuses.
+FR-NA-04: The network administrator should observe three KPI graphs which provide real-time data regarding latency, jitter, and packet loss indicators with one-second refresh rate.
+FR-NA-05: The network administrator should observe the probability score for each network section obtained because of work performed by the BiLSTM predictive algorithm.
+FR-NA-06: The network administrator should observe the list of alerts arranged according to severity and time.
+FR-NA-07: The network administrator needs to confirm the active alarm to show that he/she knows about the problem and to start investigation.
+FR-NA-08: The network administrator must ignore the false positive alarm with an explanation.
+FR-NA-09: The network administrator needs to set thresholds' parameters in the allowed limits.
+FR-NA-10: The network administrator should review the KPI history of a chosen network node in a certain period of time.
+FR-NA-11: The network administrator should review the history of the fault predictions and compare them to the real fault events.
+FR-NA-12: The network administrator should prepare a network health report on a certain period of time.
+FR-NA-13: The network administrator should export KPIs and prediction logs to CSV.
+FR-NA-14: The network administrator should sign out from NetVision AI dashboard.
+ICT Manager Functional Requirements
+FR-IM-01: The ICT manager will login to the NetVision AI dashboard using valid authentication credentials.
+FR-IM-02: The ICT manager will see the aggregate network performance metrics that include uptime and mean time between failure.
+FR-IM-03: The ICT manager will see the trends on the number of alerts generated on a daily, weekly, and monthly basis.
+FR-IM-04: The ICT manager will see the performance metrics of fault predictions that include F1-score and RMSE for the current model version.
+FR-IM-05: The ICT manager will see the summary of predicted versus actual faults for a specified time frame.
+FR-IM-06: The ICT manager will create the executive summary of the network reliability and prediction effectiveness.
+FR-IM-07: The ICT manager will export the executive summary report as PDF document.
+FR-IM-08: The ICT manager will logout from the NetVision AI dashboard.
+System Administrator Functional Requirements
+FR-SA-01: The system administrator shall authenticate to the NetVision AI administration interface using valid credentials.
+FR-SA-02: The system administrator shall create new user accounts with assigned roles.
+FR-SA-03: The system administrator shall edit the properties and roles assigned to existing user accounts.
+FR-SA-04: The system administrator shall disable user accounts.
+FR-SA-05: The system administrator shall set passwords for user accounts.
+FR-SA-06: The system administrator shall set default values for system-wide alert thresholds.
+FR-SA-07: The system administrator shall set the value of adaptive prediction rate reduction parameters.
+FR-SA-08: The system administrator shall monitor the activity and events of system audit logs.
+FR-SA-09: The system administrator shall launch manual training of the BiLSTM prediction model.
+FR-SA-10: The system administrator shall provide new training data sets for the BiLSTM model training.
+FR-SA-11: The system administrator shall configure the network node registration settings.
+FR-SA-12: The system administrator shall register new network nodes.
+FR-SA-13: The system administrator shall un-register network nodes.
+FR-SA-14: The system administrator shall check the system status including the availability of API and connection to database.
+FR-SA-15: The system administrator shall log out of the administration panel.
+Network Infrastructure (External System) Functional Requirements
+R-NI-01: The network infrastructure will provide KPI data stream for the NetVision AI system using the file upload or API endpoint.
+FR-NI-02: The network infrastructure will provide five mandatory KPI metrics which are latency, jitter, packet loss, retransmission rate and signal strength.
+FR-NI-03: The network infrastructure will provide data at intervals to ensure that the one second dashboard refresh requirement is met.
+BiLSTM Prediction Engine Functional Requirements
+FR-BE-01: The BiLSTM prediction engine will receive multivariate time-series data containing five network KPIs.
+FR-BE-02: The BiLSTM prediction engine will preprocess input data including normalisation and sequence windowing.
+FR-BE-03: The BiLSTM prediction engine will calculate a fault probability score from 0 to 1 per each prediction cycle.
+FR-BE-04: The BiLSTM prediction engine will process input sequences in both forward and reverse directions.
+FR-BE-05: The BiLSTM prediction engine will decrease the prediction frequency by 90% if the fault probability is less than 30%.
+FR-BE-06: The BiLSTM prediction engine will produce fault prediction output in two seconds after crossing the threshold value.
+FR-BE-07: The BiLSTM prediction engine will log the prediction record that contains timestamp, input features and calculated probability.
+FR-BE-08: The BiLSTM prediction engine will generate alert in case fault probability is equal to or greater than 70 percent.
+Functional requirements of alerting subsystem:
+FR-AS-01: Alerting subsystem will generate visual alert notification when fault probability exceeds threshold value.
+FR-AS-02: Alerting subsystem will generate audio alert notification when fault probability exceeds threshold value.
+FR-AS-03: Alerting subsystem will categorize alerts according to the severity level based on fault probability.
+FR-AS-04: Alerting subsystem will maintain records of alert consisting of time stamp, node ID, severity level and status.
+FR-AS-05: Alerting subsystem will eliminate duplication of alerts for the same node up to a specific period.
+FR-AS-06: Alerting subsystem will offer feature of alert acknowledgment
+4.2.2 Non-Functional Requirements
+Non-functional requirements determine the quality requirements and constraints that will dictate the way the system will perform its operations. All non-functional requirements will be defined in relation to the significance of the requirement and its relationship with functional requirements.
+Performance Requirements
+NFR-PE-01: The dashboard shall update all three KPI charts within one second after new data is received.
+Importance: Real-time situation awareness for network administrators.
+Associated FRs: FR-NA-04, FR-NI-03
+NFR-PE-02: The BiLSTM forecasting engine shall produce the fault probability rating within two seconds after receiving input data.
+Importance: Enables proactive actions before any service degradation occurs.
+Associated FRs: FR-BE-06, FR-BE-03
+NFR-PE-03: The system shall be able to allow access from up to ten network administrators concurrently without degradation of performance.
+Importance: Scalability to enterprise level.
+Associated FRs: FR-NA-01, FR-NA-02
+NFR-PE-04: The system shall have a 99.5% uptime while in operation.
+Importance: Continuous monitoring capability.
+Associated FRs: FR-NA-02, FR-SA-14
+Accuracy Requirements
+NFR-AC-01: The BiLSTM prediction model shall attain an F1-score of 0.85 or higher on the test set.
+Importance: Predicting faults accurately with no false alarms or false rejections.
+Related Faults: FR-BE-03, FR-BE-08
+NFR-AC-02: The BiLSTM prediction model shall attain a Root Mean Squared Error (RMSE) of 0.10 or lower on the test set.
+Importance: Estimating faults accurately.
+Related Faults: FR-BE-03, FR-BE-06
+Security Requirements
+NFR-SE-01: Authentication shall be enforced for all user accesses.
+
+Importance: Prevents unauthorised accesses to network monitoring data.
+
+Supported FRs: FR-NA-01, FR-IM-01, FR-SA-01
+
+NFR-SE-02: Role-based access control shall be implemented to restrict functionalities based on user roles.
+
+Importance: Enables users to access only authorised functions.
+
+Supported FRs: FR-SA-02, FR-SA-03, FR-NA-14, FR-IM-08
+
+NFR-SE-03: All data shall be encrypted in transit using TLS 1.3 or higher.
+
+Importance: Securely transmits sensitive network data.
+Supported FRs: FR-NI-01, FR-NA-13
+NFR-SE-04: All user passwords shall be hashed using bcrypt with a minimum work factor of 12.
+Importance: Protects user credentials from being compromised.
+Supported FRs: FR-NA-01, FR-SA-05
+NFR-SE-05: Logs shall be kept of all user actions for at least 90 days.
+Importance: Supports security investigation and compliance.
+Supporting FRs: FR-SA-08
+Usability Requirements
+NFR-US-01: The system must have a System Usability Scale (SUS) score of at least 70 by network administrators.
+Importance: This ensures the system is usable even in stressful situations.
+Supporting FRs: FR-NA-02, FR-NA-04, FR-NA-06
+NFR-US-02: The system must display important notifications in the field of view of the administrator without any need to scroll down.
+Importance: It helps in reducing the response time during a critical situation.
+Supporting FRs: FR-NA-06, FR-AS-01
+NFR-US-03: The system must display a consistent colour code for different severity levels in all views.
+Importance: It helps in reducing the cognitive load and misinterpretation.
+Supporting FRs: FR-NA-03, FR-AS-03
+NFR-US-04: The system must show error notifications along with suggested solutions.
+Importance: Enables efficient troubleshooting.
+Supporting FRs: FR-NA-01, FR-SA-14
+Reliability Requirements
+NFR-RE-01: The system must restore from failures in its components within 30 seconds.
+Importance: Reduces downtime for monitoring.
+Supporting FRs: FR-SA-14, FR-BE-07
+NFR-RE-02: The system must retain prediction information without loss while operating normally.
+Importance: Preserves historical data for analysis.
+Supporting FRs: FR-BE-07, FR-NA-11
+NFR-RE-03: The alerting sub-system must send alerts accurately without duplicate suppression failures.
+Importance: Ensures that no critical alerts are lost.
+Supporting FRs: FR-AS-05, FR-AS-01
+Scalability Requirements
+NFR-SC-01: The system shall be capable of monitoring up to 500 nodes of the network without making any changes to the architecture.
+Significance: Scalable to the network size.
+FRs supporting: FR-SA-12, FR-NA-03
+NFR-SC-02: The system shall have the ability to store at least one year of KPIs history.
+Significance: Ability to analyse trends.
+FRs supporting: FR-NA-10, FR-NA-11
+Maintainability Requirements
+NFR-MA-01: The system shall have modular architecture to enable update of each component individually.
+Significance: Maintenance and addition of new features.
+FRs supporting: FR-SA-09, FR-SA-10
+NFR-MA-02: The system shall have full
+Compatibility Requirements
+NFR-CO-01: The dashboard must work properly using up-to-date web browsers like Chrome, Firefox, Edge, and Safari.
+Reasons: Provides access in all environments.
+Other FRs supported: FR-NA-02, FR-NA-04
+NFR-CO-02: The application must allow exporting data in popular formats (CSV, PDF) for use in other analysis applications.
+Reasons: Allows data to be integrated with other workflows.
+Other FRs supported: FR-NA-1
+4.3 System Design Diagrams
+Design artifacts for the NetVision AI application can be found in the following sections. The collection of diagrams describes the structural and behavioural aspects of the system, its data models and user interface. For storage architecture, Firebase Firestore will be used. This NoSQL document-oriented database allows you to implement native real-time synchronization with Flutter clients using onSnapshot listeners.
+4.3.1 Use Case Diagram
+The use case diagram  depicts the relationships between external actors and the NetVision AI system. The system boundary represents all the functionalities covered by the functional requirements. There are three main human actors who interact with the system: Network Administrator, ICT Manager, and System Administrator. Two more external system actors interact with NetVision AI system: the Network Infrastructure (data source) and the BiLSTM Prediction Engine (internal system component that can be considered an actor in some use cases).
+The use cases for the Network Administrator include authentication, real-time dashboard, interactive map, KPI graphs, fault prediction, manage alerts (acknowledge, dismiss), configuration of thresholds, historical data, reporting, export data, and logout. The use cases for the ICT Manager include authentication, aggregate statistics, alert trends, prediction metrics, executive reporting, report export, and logout. The use cases for the System Administrator include authentication, user management, system configuration, audit logs, model retraining, network node registration, system health monitoring, and logout.
+ 
+Figure 3 NetVision AI Use Case Diagram
+4.3.2 Class Diagram
+The figure below is the class diagram representing the object-oriented design of NetVision AI, highlighting key classes with their attributes, methods and associations. MVC design pattern customized for state management with BLoC architecture of Flutter framework and using Firestore as the storage via the repository classes.
+User is the superclass representing all the human actors, having Network Administrator, ICT Manager and System Administrator as subclasses that inherit the authentication attributes and the user profile. Network Node class represents the network infrastructure being monitored, including the attributes for the identification of the node, its location and status. KPIMetric class holds information about each KPI measurement such as latency, jitter, packet loss, retransmission rate and signal strength with the timestamp and the measured value attribute. Prediction Record class holds the results of the BiLSTM model predictions (fault probability, timestamp and node reference). Alert class contains the information about the generated alerts including the severity, status and acknowledgement details. Threshold Configuration class handles the alert threshold settings. Report class is used to represent the generated reports with type and parameters as well as the output format. Audit Log class logs the events and user activities. BiLSTMModel class includes the prediction algorithm with methods to train, predict and save the model.
+ 
+Figure 4 NetVision AI Class Diagram – Users, Roles and Reporting
+ 
+Figure 5 NetVision AI Class Diagram – Monitoring, Prediction and Alerting
+
+4.3.3 Sequence Diagrams
+Sequence diagrams display the dynamic interaction among objects over time in certain scenarios. Below, three important scenarios are described: real-time monitoring and predictions through Firestore listeners, acknowledgment of alerts, and generation of reports.
+4.3.3.1 Sequence Diagram: Real-Time Monitoring and Prediction
+In the sequence diagram below, the steps that occur in case the system uses real-time KPI monitoring and fault predictions are illustrated. In this scenario, KPI data is provided by Network Infrastructure and sent to the Cloud Function which writes to Firestore and triggers another Cloud Function with BiLSTM prediction. Finally, native onSnapshot listeners in Firestore send the information to the Flutter dashboard without requiring any additional WebSocket server.
+
+ 
+Figure 6 Sequence Diagram for Normal Prediction Flow
+ 
+Figure 7 Sequence Diagram for Alert Flow
+4.3.3.2 Sequence Diagram: Alert Acknowledgement
+
+This sequence diagram illustrates the interaction when a Network Administrator acknowledges an alert. The process involves alert retrieval, status update, and database persistence.
+
+ 
+Figure 8 Sequence Diagram  for UI Interaction & Business Logic
+ 
+Figure 9 Sequence Diagram  for Audit Logging & Confirmation
+4.3.3.3 Sequence Diagram: Report Generation
+This sequence diagram below depicts the process when an ICT Manager generates an executive summary report. The interaction involves parameter specification, data aggregation, report formatting, and export.
+
+ 
+Figure 10 Sequence Diagram for Report Generation
+4.3.4 Entity-Relationship Diagram
+Firestore does not have tables, rows, foreign keys, or joins. Rather, the data is stored in collections (containing documents) and documents (data records like JSON). Relationships are represented using embedded objects or arrays (denormalization), document references (for relationships across collections) and subcollections (such as networkNodes/{nodeId}/kpiMetrics/{metricId}) for hierarchical data.
+The entity-relationship diagram (Figure 4.6) represents the conceptual data model of NetVision AI using Firestore’s document-based model. This diagram defines the main collections, their structure, and their relationships. The ERD acts as the basis for the Firestore data model presentation.
+
+ 
+Figure 11  Identity & Access Domain Entity-Relationship Diagram
+ 
+Figure 12 Infrastructure Domain Entity Relationship Diagram
+ 
+Figure 13 Metrics Domain Entity Relationship Diagram
+ 
+Figure 14 Prediction & Alerting Domain Entity Relationship Diagram
+4.3.5 Database Schema
+The database schema is composed of thirteen related tables that support the whole life cycle of network monitoring, fault prediction and alert management. At its heart, the schema separates concerns into four logical domains: identity and access management, network infrastructure, metrics collection, and prediction with alerting. This modular design allows each table to have a specific purpose and maintains referential integrity across the system with foreign key relationships.
+ 
+Figure 15 NetVision AI Database Schema – Core Monitoring and Prediction
+
+ 
+Figure 16 NetVision AI Database Schema – Users, Roles, Reports and Audit
+
+4.3.6 User Interface Design (Wireframes)
+The user interface design for NetVision AI follows user-centred design principles, prioritising rapid situational awareness, cognitive load reduction, and efficient alert management. The following wireframes illustrate the primary screens and their layout.
+4.3.6.1 Dashboard Overview Screen
+The dashboard overview presents the primary monitoring interface. The layout is organised into distinct functional zones: a header with system status and user controls, a left panel with navigation and node selection, a central area with KPI graphs and fault probability display, and a right panel with active alerts.
+ 
+Figure 17 Dashboard Overview Wireframe
+4.3.6.2 Interactive Map View Screen
+The interactive map view (Figure 4.8) provides geographical visualisation of network nodes with status indicators and drill-down capability.
+ 
+Figure 18 Interactive Map View Wireframe
+4.3.6.3 Alert Management Screen
+The alert management screen provides comprehensive alert handling with filtering, sorting, and bulk action capabilities.
+ 
+Figure 19 Alert Management Screen Wireframe
+4.3.6.4 Historical Analysis Screen
+The historical analysis screen enables administrators to review past KPI trends and prediction accuracy.
+ 
+Figure 20 Historical Analysis Screen Wireframe
+
+4.3.6.5 Report Generation Screen
+The report generation screen provides options for generating various report types with configurable parameters.
+ 
+Figure 21 Report Generation Screen Wireframe
+
+4.3.6.6 System Administration Screen
+The system administration screen provides user management, threshold configuration, and model management functions.
+
+ 
+Figure 22  System Administration Screen Wireframe
+4.4 Summary
+This chapter has presented the comprehensive analysis and design of NetVision AI. The requirements analysis identified 48 functional requirements organised by actor and 18 non-functional requirements covering performance, accuracy, security, usability, reliability, scalability, maintainability, and compatibility. The design artefacts—including the use case diagram, class diagram, sequence diagrams, entity-relationship diagram, database schema, and wireframes—collectively provide a complete blueprint for implementation. The use case diagram illustrated the interactions between three human actors and two system actors within the defined system boundary. The class diagram specified the object-oriented structure with twelve principal classes. Three sequence diagrams detailed the dynamic interactions for real-time monitoring, alert acknowledgement, and report generation. The entity-relationship diagram and database schema provided the data model foundation with eleven tables and appropriate indexes. Finally, six wireframes illustrated the user interface design for the primary screens. These design artefacts are carried forward to Chapter 5 for implementation and testing.
+
+
+
+
+
+
+References
+Albattat, S. M., Albaker, B. M., & Alsaedi, M. A. (2025). A systematic review of AI and IoT-powered smart maintenance methods in industrial application domains. Engineering, Technology & Applied Science Research, 26890-26900.
+AlertOps. (2025). How AlertOps cut alert noise by 70% for a global NOC. Retrieved from AlertOps Resource Library.
+Azeta, J., Omeche, T. T., Daniyan, I., Abiola, J. O., Daniyan, L., Phuluwa, H. S., & Muvunzi, R. (2025). Artificial intelligence and robotics in predictive maintenance: A comprehensive review. Frontiers in Mechanical Engineering.
+Catalin, M. &. (2026). Deep Neural Network-Based Fault Diagnosis for Predictive Maintenance of Induction Motors. The Scientific Bulletin of Electrical Engineering Faculty. 
+Communications Authority of Kenya. (2023). Quarterly sector statistics report: Fourth quarter 2022/2023. CAK.
+Cote Network Logger. (2025). Beautiful Flutter developer tool for real-time HTTP network monitoring with web dashboard (Version 1.2.0). Retrieved from Pub.dev.
+Hornyak, O. (2026). An LSTM approach for fault prediction. Conference on Machine Learning and Data Analytics. doi:https://doi.org/10.17048/fmfai.2025.90
+Jiang, W. &. (2025). Artificial intelligence agent-enabled predictive maintenance: Conceptual proposal and basic framework. Computers.
+Mishra, S., Tripathi, A., & Sharma, R. (2026). Real-Time Edge-Deployed LSTM for IoT Botnet & DDoS Anomaly Detection. 2025 IEEE 5th International Conference on ICT in Business Industry & Government (ICTBIG). doi: 10.1109/ICTBIG68706.2025.11323918
+Seliem, M. R. (2025). BiLSTM-based fault anticipation for predictive activation of FRER in time-sensitive industrial networks. MDPI. doi:10.3390/iot6040060
+Sheng He, W. H. (2026). GDCMAD: Graph-based dual-contrastive representation learning for multivariate time series anomaly detection. Information Sciences.
+Soliman, W., Mikkelesen, A., & and Seljåsen, T. H. (n.d.). Security Operations Centers and the Battle between Mindfulness and Mindlessness: Toward a Model of Mindful Balancin. AMCIS 2025 Proceedings. 19. 
+Storey, A. (2025). Dynamic Orchestration of Distributed Streaming Analytics in Edge-Integrated Cloud Platforms for Real-Time Event Detection. Global Journal of Multidisciplinary Research and Development.
+Tang, K. &. (2026). VAML‐Net: Unsupervised Anomaly Detection for Multivariate Time Series in Space‐Air‐Ground Integrated Network (SAGIN) Environments Through a Variational Autoencoder and Multiresolution LSTM. Transactions on Emerging Telecommunications Technologies. .
+Tziakouris, G., & Al-Fardan, N. J. (2025). Cognitive fatigue detection system for critical operational environments. Retrieved from Technical Disclosure Commons.
+Workato. (2025). Alert fatigue: A guide to understanding and reducing it. Retrieved from Workato Resource Center.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Appendices:
+Appendix 1: Gantt Chart
+
+ 
+Appendix 1 Project Gantt Chart - NetVision AI
+

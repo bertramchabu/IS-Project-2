@@ -57,4 +57,33 @@ void main() {
 
     expect(window, isNull);
   });
+
+  test('keeps the window sample count aligned with the returned sequence', () {
+    final start = DateTime.utc(2026, 10, 17);
+    final metrics = <KpiMetricModel>[];
+    const types = MetricType.values;
+
+    for (var timestep = 0; timestep < 12; timestep++) {
+      for (var index = 0; index < types.length; index++) {
+        metrics.add(
+          KpiMetricModel(
+            metricId: '$timestep-${types[index].name}',
+            nodeId: 'node-1',
+            metricType: types[index],
+            value: timestep * 10 + index.toDouble(),
+            unit: '',
+            timestamp: start.add(Duration(seconds: timestep)),
+            source: DataSource.api,
+          ),
+        );
+      }
+    }
+
+    final window = repository.latestWindow(metrics);
+
+    expect(window, isNotNull);
+    expect(window!.sequence, hasLength(ModelInferenceRepository.windowSize));
+    expect(window.sampleCount, ModelInferenceRepository.windowSize);
+    expect(window.isReady, isTrue);
+  });
 }

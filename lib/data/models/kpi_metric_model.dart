@@ -49,16 +49,23 @@ class KpiMetricModel {
   }
 
   static MetricType _parseMetricType(String? v) {
-    switch (v) {
+    final normalized = (v ?? '').trim().toLowerCase();
+    switch (normalized) {
       case 'latency':
         return MetricType.latency;
       case 'jitter':
         return MetricType.jitter;
+      case 'packetloss':
       case 'packet_loss':
+      case 'packet-loss':
         return MetricType.packetLoss;
+      case 'retransmissionrate':
       case 'retransmission_rate':
+      case 'retransmission-rate':
         return MetricType.retransmissionRate;
+      case 'signalstrength':
       case 'signal_strength':
+      case 'signal-strength':
         return MetricType.signalStrength;
       default:
         return MetricType.latency;
@@ -66,12 +73,24 @@ class KpiMetricModel {
   }
 
   static DataSource _parseSource(String? v) {
-    switch (v) {
-      case 'CSVReplay':
+    final normalized = (v ?? '').trim().toLowerCase();
+    switch (normalized) {
+      case 'simulated':
+      case 'simulation':
+      case 'demo':
+        return DataSource.simulated;
+      case 'csvreplay':
+      case 'csv_replay':
+      case 'csv-replay':
         return DataSource.csvReplay;
-      case 'API':
+      case 'api':
+      case 'rest':
+      case 'cloudfunction':
+      case 'firebase':
         return DataSource.api;
-      case 'FileUpload':
+      case 'fileupload':
+      case 'file_upload':
+      case 'file-upload':
         return DataSource.fileUpload;
       default:
         return DataSource.simulated;
@@ -79,12 +98,18 @@ class KpiMetricModel {
   }
 
   static DataQuality _parseQuality(String? v) {
-    switch (v) {
-      case 'Good':
+    final normalized = (v ?? '').trim().toLowerCase();
+    switch (normalized) {
+      case 'good':
+      case 'healthy':
         return DataQuality.good;
-      case 'Fair':
+      case 'fair':
+      case 'warning':
+      case 'moderate':
         return DataQuality.fair;
-      case 'Poor':
+      case 'poor':
+      case 'critical':
+      case 'bad':
         return DataQuality.poor;
       default:
         return DataQuality.good;

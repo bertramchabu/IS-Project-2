@@ -208,6 +208,7 @@ class ModelInferenceRepository {
         ? alignedSamples.length - windowSize
         : 0;
     final recentSamples = alignedSamples.skip(startIndex).toList();
+    final recentSampleCount = recentSamples.length;
 
     return ModelKpiWindow(
       sequence: recentSamples.map((sample) {
@@ -219,7 +220,7 @@ class ModelInferenceRepository {
       sampleKey:
           MetricType.values.map((type) => lastSample[type]!.metricId).join('|'),
       timestamp: latestTimestamp,
-      sampleCount: alignedSamples.length,
+      sampleCount: recentSampleCount,
     );
   }
 
