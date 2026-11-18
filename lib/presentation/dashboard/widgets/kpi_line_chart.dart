@@ -188,23 +188,18 @@ class KpiLineChart extends StatelessWidget {
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: Colors.white)),
-          const Spacer(),
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.show_chart,
-                    color: color.withValues(alpha: 0.4), size: 28),
-                const SizedBox(height: 8),
-                const Text('No data available',
-                    style: TextStyle(
-                        color: Colors.white54,
-                        fontSize: 12,
-                        fontFamily: 'monospace')),
-              ],
+          Expanded(
+            child: Center(
+              child: Text(
+                'No data available',
+                style: TextStyle(
+                  color: color.withValues(alpha: 0.6),
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                ),
+              ),
             ),
           ),
-          const Spacer(),
         ],
       ),
     );

@@ -12,6 +12,7 @@ class ModelApiStatus {
   final double? f1Score;
   final double? rmse;
   final String message;
+  final bool supportsDemoOnlyInference;
 
   const ModelApiStatus({
     required this.isOnline,
@@ -20,6 +21,7 @@ class ModelApiStatus {
     required this.f1Score,
     required this.rmse,
     required this.message,
+    required this.supportsDemoOnlyInference,
   });
 }
 
@@ -57,6 +59,7 @@ class ModelInferenceRepository {
   String _modelVersion = 'unknown';
   double? _f1Score;
   double? _rmse;
+  bool _supportsDemoOnlyInference = false;
 
   ModelInferenceRepository({
     FirebaseFunctions? functions,
@@ -92,6 +95,7 @@ class ModelInferenceRepository {
     _modelVersion = status['model_version'] as String? ?? 'unknown';
     _f1Score = _optionalDouble(status['f1_score']);
     _rmse = _optionalDouble(status['rmse']);
+    _supportsDemoOnlyInference = status['supports_demo_only'] == true;
 
     return ModelApiStatus(
       isOnline: isOnline,
@@ -102,22 +106,33 @@ class ModelInferenceRepository {
       message: isModelLoaded
           ? 'Model $_modelVersion is ready'
           : 'Model function is reachable, but the model is not loaded',
+      supportsDemoOnlyInference: _supportsDemoOnlyInference,
     );
   }
 
   Future<PredictionModel> predictLiveMetric({
     required String nodeId,
     required ModelKpiWindow window,
+    bool demoOnly = false,
   }) async {
+    if (demoOnly && !_supportsDemoOnlyInference) {
+      throw StateError(
+        'The deployed model service does not support isolated replay inference. '
+        'Deploy the updated model functions before using replay alerts.',
+      );
+    }
     if (!window.isReady) {
       throw ModelSequenceNotReadyException(
         'Buffering KPI sequence (${window.sampleCount}/$windowSize samples).',
       );
     }
     await _ensureAuthenticated();
+    final requestNodeId = demoOnly ? 'SYNTHETIC-DEMO-$nodeId' : nodeId;
     final result = await _callables.httpsCallable('predict_fault').call({
-      'node_id': nodeId,
+      'node_id': requestNodeId,
       'sequence': window.sequence,
+      'input_timestamp_utc': window.timestamp.toUtc().toIso8601String(),
+      'demo_only': demoOnly,
     });
     final prediction = _asMap(result.data);
     final probability = _requiredDouble(prediction, 'fault_probability');
@@ -134,10 +149,16 @@ class ModelInferenceRepository {
             isUtc: true,
           )
         : DateTime.now().toUtc();
+    final inputTimestampValue = prediction['input_timestamp_utc'];
+    final inputTimestamp = inputTimestampValue is String
+        ? DateTime.parse(inputTimestampValue).toUtc()
+        : window.timestamp.toUtc();
+    final serverPredictionId = prediction['prediction_id'] as String?;
     _modelVersion = prediction['model_version'] as String? ?? _modelVersion;
 
     return PredictionModel(
-      predictionId: '$nodeId-${predictionTimestamp.microsecondsSinceEpoch}',
+      predictionId: serverPredictionId ??
+          '$nodeId-${predictionTimestamp.microsecondsSinceEpoch}',
       nodeId: nodeId,
       modelVersionId: _modelVersion,
       faultProbability: probability,
@@ -147,11 +168,12 @@ class ModelInferenceRepository {
           _optionalDouble(prediction['inference_latency_ms'])?.round(),
       adaptiveReductionApplied: false,
       predictionTimestamp: predictionTimestamp,
-      inputTimestamp: window.timestamp,
+      inputTimestamp: inputTimestamp,
       triggeredBy: 'Firebase BiLSTM Function',
       operationalStatus: prediction['status'] as String?,
       message: prediction['message'] as String?,
       alertTriggered: prediction['alert_triggered'] == true,
+      serverPersisted: serverPredictionId != null,
       computationalSavingsPercent:
           _optionalDouble(prediction['computational_savings_percent'])?.round(),
       nextSamplingIntervalSeconds:

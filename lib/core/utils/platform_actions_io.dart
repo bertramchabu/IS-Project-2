@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+import 'app_error_logger.dart';
+
 /// Writes [csv] to the user's Downloads (or app documents) directory and
 /// returns the file path.
 Future<String> downloadCsv(String fileName, String csv) async {
-  final dir = await getDownloadsDirectory() ??
-      await getApplicationDocumentsDirectory();
+  final dir =
+      await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
   final file = File('${dir.path}${Platform.pathSeparator}$fileName');
   await file.writeAsString(csv);
   return file.path;
@@ -20,7 +22,14 @@ Future<void> playAlertChime() async {
       '-Command',
       '[Console]::Beep(880, 220); [Console]::Beep(660, 300)',
     ]);
-  } catch (_) {
-    // Audio must never break the monitoring flow.
+  } catch (error) {
+    AppErrorLogger.log('AlertAudio.play', error);
   }
 }
+
+void showPlatformNotification({
+  required String title,
+  required String body,
+  required String tag,
+  required String clickUrl,
+}) {}

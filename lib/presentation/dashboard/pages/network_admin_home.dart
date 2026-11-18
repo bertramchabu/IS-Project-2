@@ -4,21 +4,31 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/utils/app_error_logger.dart';
 import '../../../data/models/kpi_metric_model.dart';
 import '../../../data/models/network_node_model.dart';
+import '../../../data/repositories/threat_model_inference_repository.dart';
 import '../../../data/models/user_models.dart';
 import '../../../di/service_locator.dart' as di;
 import '../../../services/csv_telemetry_replay.dart';
 import '../../alerts/bloc/alert_bloc.dart';
 import '../../alerts/bloc/alert_event.dart';
 import '../../alerts/bloc/alert_state.dart';
+import '../../alerts/alert_notification_tracker.dart';
+import '../../alerts/pages/alert_management_page.dart';
 import '../../alerts/widgets/alert_panel.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../../auth/bloc/auth_event.dart';
 import '../../auth/bloc/auth_state.dart';
 import '../../auth/widgets/user_profile_dialog.dart';
 import '../../widgets/glass_ui.dart';
+import '../widgets/threat_model_status_card.dart';
 import '../../widgets/web_safe_backdrop_blur.dart';
+import '../../threat_monitoring/pages/threat_monitoring_page.dart';
+import '../../threat_monitoring/bloc/threat_monitoring_bloc.dart';
+import '../../threat_monitoring/bloc/threat_monitoring_event.dart';
+import '../../threat_monitoring/bloc/threat_monitoring_state.dart';
+import '../../widgets/browser_notification_button.dart';
 import '../bloc/kpi_bloc.dart';
 import '../bloc/kpi_event.dart';
 import '../bloc/kpi_state.dart';
@@ -54,6 +64,10 @@ class NetworkAdminHome extends StatelessWidget {
         BlocProvider(
             create: (_) => di.sl<AlertBloc>()..add(const AlertsStarted())),
         BlocProvider(create: (_) => di.sl<PredictionBloc>()),
+        BlocProvider(
+          create: (_) => di.sl<ThreatMonitoringBloc>()
+            ..add(const ThreatMonitoringStarted()),
+        ),
       ],
       child: const _DashboardShell(),
     );
@@ -70,9 +84,31 @@ class _DashboardShell extends StatefulWidget {
 class _DashboardShellState extends State<_DashboardShell> {
   CsvTelemetryReplay? _telemetryReplay;
   Timer? _simulationTimer;
+  late Future<ThreatModelApiStatus> _threatStatusFuture;
   bool _replayLoading = false;
-  bool _autoReplayAttempted = false;
+  bool _predictionStartAttempted = false;
   String? _predictionNodeId;
+  final AlertNotificationTracker _alertNotificationTracker =
+      AlertNotificationTracker();
+
+  @override
+  void initState() {
+    super.initState();
+    _threatStatusFuture = _loadThreatModelStatus();
+  }
+
+  Future<ThreatModelApiStatus> _loadThreatModelStatus() async {
+    try {
+      return await di.sl<ThreatModelInferenceRepository>().checkStatus();
+    } catch (error) {
+      AppErrorLogger.log('NetworkAdminHome.threatModelStatus', error);
+      rethrow;
+    }
+  }
+
+  void _refreshThreatModelStatus() {
+    setState(() => _threatStatusFuture = _loadThreatModelStatus());
+  }
 
   bool get _isSimulationActive => _simulationTimer != null;
 
@@ -104,6 +140,7 @@ class _DashboardShellState extends State<_DashboardShell> {
     try {
       _telemetryReplay ??= await CsvTelemetryReplay.load();
     } catch (error) {
+      AppErrorLogger.log('NetworkAdminHome.loadCsvReplay', error);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not load CSV telemetry: $error')),
@@ -123,14 +160,17 @@ class _DashboardShellState extends State<_DashboardShell> {
     if (locationIndex < 0 ||
         locationIndex >= _telemetryReplay!.sourceIds.length) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(
-                'CSV replay cannot map this location\'s alphabetical position.')),
+        const SnackBar(
+          content: Text(
+            'CSV replay cannot map this location\'s alphabetical position.',
+          ),
+        ),
       );
       return;
     }
 
     kpiBloc.add(const KpiSimulationModeChanged(true));
+    context.read<ThreatMonitoringBloc>().add(const ThreatDemoReplayRequested());
     _simulationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       final state = kpiBloc.state;
       final selectedNode = state is KpiLoaded ? state.selectedNode : null;
@@ -186,15 +226,14 @@ class _DashboardShellState extends State<_DashboardShell> {
     final kpiState = context.watch<KpiBloc>().state;
     final predictionState = context.watch<PredictionBloc>().state;
 
-    if (!_autoReplayAttempted &&
+    if (!_predictionStartAttempted &&
         kpiState is KpiLoaded &&
         kpiState.selectedNode != null) {
-      _autoReplayAttempted = true;
+      _predictionStartAttempted = true;
       final nodeId = kpiState.selectedNode!.nodeId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _startPredictionForNode(nodeId);
-          unawaited(_startCsvReplay());
         }
       });
     }
@@ -207,6 +246,8 @@ class _DashboardShellState extends State<_DashboardShell> {
     final modelReady = predictionState is PredictionLoaded &&
         predictionState.modelApiOnline &&
         predictionState.modelLoaded;
+    final modelApiOnline =
+        predictionState is PredictionLoaded && predictionState.modelApiOnline;
 
     return Scaffold(
       backgroundColor: _AppColors.bg,
@@ -228,6 +269,7 @@ class _DashboardShellState extends State<_DashboardShell> {
               initials,
               lastMetricUpdate,
               modelReady,
+              modelApiOnline,
               _isSimulationActive,
               _replayLoading,
               _toggleSimulation,
@@ -250,8 +292,9 @@ class _DashboardShellState extends State<_DashboardShell> {
                   ),
                   BlocListener<KpiBloc, KpiState>(
                     listenWhen: (previous, current) {
-                      if (current is! KpiLoaded || current.metrics.isEmpty)
+                      if (current is! KpiLoaded || current.metrics.isEmpty) {
                         return false;
+                      }
                       if (previous is! KpiLoaded) return true;
                       return previous.selectedNode?.nodeId ==
                               current.selectedNode?.nodeId &&
@@ -264,8 +307,35 @@ class _DashboardShellState extends State<_DashboardShell> {
                             .add(PredictionMetricsReceived(
                               nodeId: state.selectedNode!.nodeId,
                               metrics: state.metrics,
+                              isReplay: _isSimulationActive,
                             ));
                       }
+                    },
+                  ),
+                  BlocListener<AlertBloc, AlertState>(
+                    listenWhen: (_, current) => current is AlertLoaded,
+                    listener: (context, state) {
+                      if (state is! AlertLoaded) return;
+                      final newAlerts =
+                          _alertNotificationTracker.observe(state.activeAlerts);
+                      if (newAlerts.isEmpty) return;
+
+                      final headline = newAlerts.length == 1
+                          ? newAlerts.single.title
+                          : '${newAlerts.length} new network alerts';
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(headline),
+                          action: SnackBarAction(
+                            label: 'View',
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const AlertManagementPage(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
                     },
                   ),
                 ],
@@ -280,7 +350,27 @@ class _DashboardShellState extends State<_DashboardShell> {
                       return _ErrorView(message: state.message);
                     }
                     if (state is KpiLoaded) {
-                      return _DashboardBody(state: state);
+                      return Column(
+                        children: [
+                          ThreatModelStatusCard(
+                            statusFuture: _threatStatusFuture,
+                            onRefresh: _refreshThreatModelStatus,
+                            onRunDemo: () {
+                              final threatBloc =
+                                  context.read<ThreatMonitoringBloc>();
+                              threatBloc.add(const ThreatDemoReplayRequested());
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ThreatMonitoringPage(
+                                    bloc: threatBloc,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          Expanded(child: _DashboardBody(state: state)),
+                        ],
+                      );
                     }
                     return const Center(
                         child: Text('Initialising...',
@@ -302,14 +392,18 @@ class _DashboardShellState extends State<_DashboardShell> {
     String initials,
     DateTime? lastMetricUpdate,
     bool modelReady,
+    bool modelApiOnline,
     bool simulationActive,
     bool replayLoading,
     VoidCallback onSimulationToggle,
   ) {
-    final compactActions = MediaQuery.sizeOf(context).width < 900;
+    final width = MediaQuery.sizeOf(context).width;
+    final compactActions = width < 900;
+    final veryCompact = width < 600;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding:
+          EdgeInsets.symmetric(horizontal: veryCompact ? 12 : 20, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.02),
         border: Border(
@@ -349,60 +443,151 @@ class _DashboardShellState extends State<_DashboardShell> {
                       letterSpacing: 0.4)),
             ],
           ),
-          const Spacer(),
-          if (compactActions)
+          if (veryCompact) ...[
+            const Spacer(),
+            const BrowserNotificationButton(),
+          ],
+          if (veryCompact)
+            PopupMenuButton<String>(
+              tooltip: 'Dashboard actions',
+              onSelected: (action) {
+                switch (action) {
+                  case 'replay':
+                    onSimulationToggle();
+                    break;
+                  case 'threats':
+                    final threatBloc = context.read<ThreatMonitoringBloc>();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ThreatMonitoringPage(
+                          bloc: threatBloc,
+                          replaySessionActive: simulationActive,
+                        ),
+                      ),
+                    );
+                    break;
+                  case 'profile':
+                    if (user != null) UserProfileDialog.show(context, user);
+                    break;
+                  case 'logout':
+                    context.read<AuthBloc>().add(const AuthLogoutRequested());
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'replay',
+                  enabled: !replayLoading,
+                  child: Text(replayLoading
+                      ? 'Loading replay…'
+                      : simulationActive
+                          ? 'Stop replay'
+                          : 'Start replay'),
+                ),
+                PopupMenuItem(
+                  value: 'threats',
+                  child: Text(simulationActive
+                      ? 'Threat monitoring + synthetic demo'
+                      : 'Threat monitoring'),
+                ),
+                if (user != null)
+                  const PopupMenuItem(
+                    value: 'profile',
+                    child: Text('Profile'),
+                  ),
+                const PopupMenuItem(
+                  value: 'logout',
+                  child: Text('Log out'),
+                ),
+              ],
+              icon: const Icon(Icons.more_vert_rounded,
+                  color: _AppColors.textPrimary),
+            ),
+          if (!veryCompact) ...[
+            const Spacer(),
+            if (compactActions)
+              IconButton(
+                onPressed: replayLoading ? null : onSimulationToggle,
+                icon: replayLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(
+                        simulationActive
+                            ? Icons.stop_circle_outlined
+                            : Icons.play_circle_outline_rounded,
+                        color: simulationActive
+                            ? _AppColors.warning
+                            : _AppColors.accent),
+              )
+            else
+              TextButton.icon(
+                onPressed: replayLoading ? null : onSimulationToggle,
+                icon: replayLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(
+                        simulationActive
+                            ? Icons.stop_circle_outlined
+                            : Icons.play_circle_outline_rounded,
+                        size: 18),
+                label: Text(replayLoading
+                    ? 'LOADING DATA'
+                    : simulationActive
+                        ? 'STOP REPLAY'
+                        : 'LIVE REPLAY'),
+                style: TextButton.styleFrom(
+                  foregroundColor:
+                      simulationActive ? _AppColors.warning : _AppColors.accent,
+                ),
+              ),
+            const SizedBox(width: 12),
             IconButton(
-              onPressed: replayLoading ? null : onSimulationToggle,
-              icon: replayLoading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : Icon(
-                      simulationActive
-                          ? Icons.stop_circle_outlined
-                          : Icons.play_circle_outline_rounded,
-                      color: simulationActive
-                          ? _AppColors.warning
-                          : _AppColors.accent),
-            )
-          else
-            TextButton.icon(
-              onPressed: replayLoading ? null : onSimulationToggle,
-              icon: replayLoading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : Icon(
-                      simulationActive
-                          ? Icons.stop_circle_outlined
-                          : Icons.play_circle_outline_rounded,
-                      size: 18),
-              label: Text(replayLoading
-                  ? 'LOADING DATA'
-                  : simulationActive
-                      ? 'STOP REPLAY'
-                      : 'LIVE REPLAY'),
-              style: TextButton.styleFrom(
-                foregroundColor:
-                    simulationActive ? _AppColors.warning : _AppColors.accent,
+              tooltip: simulationActive
+                  ? 'Open threat monitoring and run a synthetic model demo'
+                  : 'Threat monitoring (separate from fault anticipation)',
+              onPressed: () {
+                final threatBloc = context.read<ThreatMonitoringBloc>();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ThreatMonitoringPage(
+                      bloc: threatBloc,
+                      runSyntheticDemoOnOpen: simulationActive,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(
+                Icons.shield_outlined,
+                color: Color(0xFF38BDF8),
               ),
             ),
-          const SizedBox(width: 12),
-          _LiveIndicator(
-              lastMetricUpdate: lastMetricUpdate,
-              modelReady: modelReady,
-              simulationActive: simulationActive),
-          const SizedBox(width: 12),
-          _UserChip(user: user, username: username, initials: initials),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded,
-                color: _AppColors.textSecondary, size: 20),
-            onPressed: () =>
-                context.read<AuthBloc>().add(const AuthLogoutRequested()),
-          ),
+            if (!compactActions) ...[
+              _LiveIndicator(
+                  lastMetricUpdate: lastMetricUpdate,
+                  modelReady: modelReady,
+                  modelApiOnline: modelApiOnline,
+                  simulationActive: simulationActive),
+              const SizedBox(width: 12),
+            ],
+            const BrowserNotificationButton(),
+            _UserChip(
+              user: user,
+              username: username,
+              initials: initials,
+              compact: compactActions,
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.logout_rounded,
+                  color: _AppColors.textSecondary, size: 20),
+              onPressed: () =>
+                  context.read<AuthBloc>().add(const AuthLogoutRequested()),
+            ),
+          ],
         ],
       ),
     );
@@ -412,11 +597,13 @@ class _DashboardShellState extends State<_DashboardShell> {
 class _LiveIndicator extends StatelessWidget {
   final DateTime? lastMetricUpdate;
   final bool modelReady;
+  final bool modelApiOnline;
   final bool simulationActive;
 
   const _LiveIndicator(
       {required this.lastMetricUpdate,
       required this.modelReady,
+      required this.modelApiOnline,
       required this.simulationActive});
 
   @override
@@ -445,15 +632,23 @@ class _LiveIndicator extends StatelessWidget {
                 : lastMetricUpdate == null
                     ? 'WAITING'
                     : 'STALE DATA';
+        final modelLabel = modelReady
+            ? 'MODEL READY'
+            : modelApiOnline
+                ? 'MODEL NOT READY'
+                : 'MODEL OFFLINE';
+        final modelColor = modelReady
+            ? _AppColors.accent
+            : modelApiOnline
+                ? _AppColors.warning
+                : _AppColors.unknown;
 
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             _StatusBadge(label: dataLabel, color: dataColor),
             const SizedBox(width: 8),
-            _StatusBadge(
-                label: modelReady ? 'MODEL READY' : 'MODEL OFFLINE',
-                color: modelReady ? _AppColors.accent : _AppColors.unknown),
+            _StatusBadge(label: modelLabel, color: modelColor),
           ],
         );
       },
@@ -506,7 +701,13 @@ class _UserChip extends StatelessWidget {
   final UserModel? user;
   final String username;
   final String initials;
-  const _UserChip({this.user, required this.username, required this.initials});
+  final bool compact;
+  const _UserChip({
+    this.user,
+    required this.username,
+    required this.initials,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -532,15 +733,17 @@ class _UserChip extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                       color: _AppColors.accent)),
             ),
-            const SizedBox(width: 8),
-            Text(username,
-                style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: _AppColors.textPrimary)),
-            const SizedBox(width: 4),
-            const Icon(Icons.keyboard_arrow_down_rounded,
-                size: 16, color: _AppColors.textMuted),
+            if (!compact) ...[
+              const SizedBox(width: 8),
+              Text(username,
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _AppColors.textPrimary)),
+              const SizedBox(width: 4),
+              const Icon(Icons.keyboard_arrow_down_rounded,
+                  size: 16, color: _AppColors.textMuted),
+            ],
           ],
         ),
       ),
@@ -738,9 +941,10 @@ class _DashboardContent extends StatelessWidget {
 
   Widget _buildWideDashboard(BuildContext context,
       {required bool showNodeSelector}) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const _SectionHeader(
             title: 'Performance & Prediction Telemetry',
@@ -751,39 +955,45 @@ class _DashboardContent extends StatelessWidget {
             _buildNodeSelector(context),
           ],
           const SizedBox(height: 14),
-          Expanded(
-            flex: 3,
+          SizedBox(
+            height: 280,
             child: Column(
               children: [
                 Expanded(
                   child: Row(
                     children: [
                       Expanded(
-                          child: KpiLineChart(
-                              title: 'Latency',
-                              unit: 'ms',
-                              color: _AppColors.accent,
-                              metrics: state.seriesFor(MetricType.latency),
-                              warningThreshold: 80,
-                              criticalThreshold: 120)),
+                        child: KpiLineChart(
+                          title: 'Latency',
+                          unit: 'ms',
+                          color: _AppColors.accent,
+                          metrics: state.seriesFor(MetricType.latency),
+                          warningThreshold: 80,
+                          criticalThreshold: 120,
+                        ),
+                      ),
                       const SizedBox(width: 14),
                       Expanded(
-                          child: KpiLineChart(
-                              title: 'Jitter',
-                              unit: 'ms',
-                              color: const Color(0xFFA78BFA),
-                              metrics: state.seriesFor(MetricType.jitter),
-                              warningThreshold: 30,
-                              criticalThreshold: 50)),
+                        child: KpiLineChart(
+                          title: 'Jitter',
+                          unit: 'ms',
+                          color: const Color(0xFFA78BFA),
+                          metrics: state.seriesFor(MetricType.jitter),
+                          warningThreshold: 30,
+                          criticalThreshold: 50,
+                        ),
+                      ),
                       const SizedBox(width: 14),
                       Expanded(
-                          child: KpiLineChart(
-                              title: 'Packet Loss',
-                              unit: '%',
-                              color: const Color(0xFFFB923C),
-                              metrics: state.seriesFor(MetricType.packetLoss),
-                              warningThreshold: 1.5,
-                              criticalThreshold: 3.0)),
+                        child: KpiLineChart(
+                          title: 'Packet Loss',
+                          unit: '%',
+                          color: const Color(0xFFFB923C),
+                          metrics: state.seriesFor(MetricType.packetLoss),
+                          warningThreshold: 1.5,
+                          criticalThreshold: 3.0,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -792,34 +1002,40 @@ class _DashboardContent extends StatelessWidget {
                   child: Row(
                     children: [
                       Expanded(
-                          child: KpiLineChart(
-                              title: 'Retransmission',
-                              unit: '%',
-                              color: const Color(0xFF38BDF8),
-                              metrics: state
-                                  .seriesFor(MetricType.retransmissionRate))),
+                        child: KpiLineChart(
+                          title: 'Retransmission',
+                          unit: '%',
+                          color: const Color(0xFF38BDF8),
+                          metrics:
+                              state.seriesFor(MetricType.retransmissionRate),
+                        ),
+                      ),
                       const SizedBox(width: 14),
                       Expanded(
-                          child: KpiLineChart(
-                              title: 'Signal Strength',
-                              unit: 'dBm',
-                              color: const Color(0xFF4ADE80),
-                              metrics:
-                                  state.seriesFor(MetricType.signalStrength))),
+                        child: KpiLineChart(
+                          title: 'Signal Strength',
+                          unit: 'dBm',
+                          color: const Color(0xFF4ADE80),
+                          metrics: state.seriesFor(MetricType.signalStrength),
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 14),
+          const SizedBox(height: 112, child: _ThreatSummaryPanel()),
           const SizedBox(height: 18),
           _SectionHeader(
-              title: 'Network Topology & Predictive Gauge',
-              subtitle:
-                  '${state.nodes.length} nodes • tap node to inspect live prediction'),
+            title: 'Network Topology & Predictive Gauge',
+            subtitle:
+                '${state.nodes.length} nodes • tap node to inspect live prediction',
+          ),
           const SizedBox(height: 14),
-          Expanded(
-            flex: 4,
+          SizedBox(
+            height: 340,
             child: Row(
               children: [
                 Expanded(flex: 2, child: _buildNodeMap(context)),
@@ -835,7 +1051,7 @@ class _DashboardContent extends StatelessWidget {
 
   Widget _buildNarrowDashboard(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -890,6 +1106,8 @@ class _DashboardContent extends StatelessWidget {
                   unit: 'dBm',
                   color: const Color(0xFF4ADE80),
                   metrics: state.seriesFor(MetricType.signalStrength))),
+          const SizedBox(height: 12),
+          const SizedBox(height: 132, child: _ThreatSummaryPanel()),
           const SizedBox(height: 20),
           _SectionHeader(
               title: 'Network Topology',
@@ -928,8 +1146,9 @@ class _DashboardContent extends StatelessWidget {
                   ))
               .toList(),
           onChanged: (nodeId) {
-            if (nodeId != null)
+            if (nodeId != null) {
               context.read<KpiBloc>().add(NodeSelected(nodeId));
+            }
           },
         ),
       ),
@@ -958,9 +1177,8 @@ class _DashboardContent extends StatelessWidget {
             metrics: state.metrics,
             predictionSource:
                 matchesSelectedNode ? predState.predictionSource : null,
-            modelApiAvailable: matchesSelectedNode &&
-                predState.modelApiOnline &&
-                predState.modelLoaded,
+            modelApiAvailable: predState.modelApiOnline,
+            modelLoaded: predState.modelLoaded,
             statusMessage: matchesSelectedNode || predState.prediction == null
                 ? predState.statusMessage
                 : 'Loading prediction for ${state.selectedNode?.nodeName ?? 'selected node'}',
@@ -976,8 +1194,110 @@ class _DashboardContent extends StatelessWidget {
           prediction: null,
           metrics: state.metrics,
           modelApiAvailable: false,
+          modelLoaded: false,
         );
       },
+    );
+  }
+}
+
+class _ThreatSummaryPanel extends StatelessWidget {
+  const _ThreatSummaryPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      borderColor: const Color(0xFF38BDF8).withValues(alpha: 0.35),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.shield_outlined,
+            color: Color(0xFF38BDF8),
+            size: 28,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: BlocBuilder<ThreatMonitoringBloc, ThreatMonitoringState>(
+              builder: (context, state) {
+                final demo = state.demoAssessments.isEmpty
+                    ? null
+                    : state.demoAssessments.last;
+                final latest =
+                    state.assessments.isEmpty ? null : state.assessments.first;
+                final summary = demo != null
+                    ? 'Synthetic model demo: ${demo.modelPrediction?.label.wireValue ?? 'UNKNOWN'} · '
+                        '${demo.nodeId}/${demo.serviceId}'
+                    : switch (state.status) {
+                        ThreatMonitoringStatus.initial ||
+                        ThreatMonitoringStatus.loading =>
+                          'Loading the separate threat-assessment feed.',
+                        ThreatMonitoringStatus.failure =>
+                          state.errorMessage ?? 'Threat feed unavailable.',
+                        ThreatMonitoringStatus.loaded when latest == null =>
+                          'Waiting for aggregate-flow telemetry; no threat has been inferred.',
+                        ThreatMonitoringStatus.loaded =>
+                          '${latest!.category} · ${latest.nodeId}/${latest.serviceId}',
+                      };
+                final modelPrediction = demo?.modelPrediction;
+                final detail = demo != null
+                    ? 'Simulation only • cloud model ${modelPrediction?.modelVersion ?? 'unavailable'} • anomaly alerts are labeled [SIMULATION].'
+                    : latest == null
+                        ? 'Separate from BiLSTM fault anticipation. No automatic blocking or remediation.'
+                        : latest.confidence == null
+                            ? 'Confidence unavailable (abstained or rules-only).'
+                            : 'Classifier confidence '
+                                '${(latest.confidence! * 100).toStringAsFixed(1)}%.';
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'THREAT MONITORING',
+                      style: TextStyle(
+                        color: Color(0xFF38BDF8),
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      summary,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      detail,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton(
+            onPressed: () {
+              final threatBloc = context.read<ThreatMonitoringBloc>();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ThreatMonitoringPage(bloc: threatBloc),
+                ),
+              );
+            },
+            child: const Text('Details'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1008,20 +1328,26 @@ class _SectionHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(title,
-                style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: _AppColors.textPrimary,
-                    letterSpacing: -0.2)),
-            Text(subtitle,
-                style:
-                    const TextStyle(fontSize: 11, color: _AppColors.textMuted)),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: _AppColors.textPrimary,
+                      letterSpacing: -0.2)),
+              Text(subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 11, color: _AppColors.textMuted)),
+            ],
+          ),
         ),
       ],
     );

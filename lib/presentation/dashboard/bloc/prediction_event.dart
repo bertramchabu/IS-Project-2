@@ -21,14 +21,16 @@ class PredictionStarted extends PredictionEvent {
 class PredictionMetricsReceived extends PredictionEvent {
   final String nodeId;
   final List<KpiMetricModel> metrics;
+  final bool isReplay;
 
   const PredictionMetricsReceived({
     required this.nodeId,
     required this.metrics,
+    this.isReplay = false,
   });
 
   @override
-  List<Object?> get props => [nodeId, metrics];
+  List<Object?> get props => [nodeId, metrics, isReplay];
 }
 
 class PredictionFirestoreUpdated extends PredictionEvent {

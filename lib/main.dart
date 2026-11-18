@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -9,6 +11,10 @@ import 'core/router/app_router.dart';
 import 'presentation/auth/bloc/auth_bloc.dart';
 import 'presentation/auth/bloc/auth_event.dart';
 import 'presentation/auth/bloc/auth_state.dart';
+import 'services/push_notification_service.dart';
+
+final _navigatorKey = GlobalKey<NavigatorState>();
+final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +23,12 @@ Future<void> main() async {
   );
   await di.init();
   runApp(const NetVisionApp());
+  unawaited(
+    di.sl<PushNotificationService>().initialize(
+          navigatorKey: _navigatorKey,
+          scaffoldMessengerKey: _scaffoldMessengerKey,
+        ),
+  );
 }
 
 class NetVisionApp extends StatelessWidget {
@@ -30,10 +42,12 @@ class NetVisionApp extends StatelessWidget {
           create: (_) => di.sl<AuthBloc>()..add(const AuthCheckRequested()),
         ),
         BlocProvider<KpiBloc>(
-          create: (_)=> di.sl<KpiBloc>(),
+          create: (_) => di.sl<KpiBloc>(),
         ),
       ],
       child: MaterialApp(
+        navigatorKey: _navigatorKey,
+        scaffoldMessengerKey: _scaffoldMessengerKey,
         title: 'NetVision AI',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
@@ -66,7 +80,8 @@ class NetVisionApp extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF00D9FF), width: 1.4),
+              borderSide:
+                  const BorderSide(color: Color(0xFF00D9FF), width: 1.4),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -100,12 +115,16 @@ class NetVisionApp extends StatelessWidget {
           ),
         ),
         home: BlocListener<AuthBloc, AuthState>(
-          listenWhen: (_, state) => state is AuthError && state.user != null,
+          listenWhen: (_, state) =>
+              (state is AuthError && state.user != null) ||
+              state is AuthAuthenticated,
           listener: (context, state) {
             if (state is AuthError) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text(state.message)),
               );
+            } else if (state is AuthAuthenticated) {
+              unawaited(di.sl<PushNotificationService>().openPendingAlert());
             }
           },
           child: BlocBuilder<AuthBloc, AuthState>(

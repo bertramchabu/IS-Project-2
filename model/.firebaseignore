@@ -12,3 +12,8 @@
 !/models/bilstm_fault_model.tflite
 !/models/model_metadata.json
 !/models/scaler.joblib
+!/models/threat/
+!/models/threat/tree.joblib
+!/models/threat/risk.joblib
+!/models/threat/ood.joblib
+!/models/threat/metadata.json

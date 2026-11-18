@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/utils/app_error_logger.dart';
 import '../../../data/models/network_node_model.dart';
 import '../../../data/repositories/kpi_repository.dart';
 import '../../../data/repositories/node_repository.dart';
@@ -31,7 +32,7 @@ class KpiBloc extends Bloc<KpiEvent, KpiState> {
 
   @override
   void onError(Object error, StackTrace stackTrace) {
-    print('[KpiBloc] Unhandled error: $error');
+    AppErrorLogger.log('KpiBloc.unhandled', error);
     super.onError(error, stackTrace);
   }
 
@@ -43,10 +44,12 @@ class KpiBloc extends Bloc<KpiEvent, KpiState> {
 
     await _nodesSub?.cancel();
     _nodesSub = _nodeRepo.watchAllNodes().listen(
-          (nodes) => add(NodesUpdated(nodes)), // ✅ event, not emit
-          onError: (e) =>
-              add(KpiStreamError(e.toString())), // ✅ event, not emit
-        );
+      (nodes) => add(NodesUpdated(nodes)),
+      onError: (Object error) {
+        AppErrorLogger.log('KpiBloc.nodesStream', error);
+        add(KpiStreamError(error.toString()));
+      },
+    );
   }
 
   Future<void> _onNodesUpdated(
@@ -99,9 +102,12 @@ class KpiBloc extends Bloc<KpiEvent, KpiState> {
 
   void _subscribeToMetrics(String nodeId) {
     _metricsSub = _kpiRepo.watchLatestPerType(nodeId).listen(
-          (metrics) => add(KpiMetricsUpdated(metrics)),
-          onError: (e) => add(KpiStreamError(e.toString())),
-        );
+      (metrics) => add(KpiMetricsUpdated(metrics)),
+      onError: (Object error) {
+        AppErrorLogger.log('KpiBloc.metricsStream', error);
+        add(KpiStreamError(error.toString()));
+      },
+    );
   }
 
   Future<void> _onMetricsUpdated(
@@ -153,7 +159,7 @@ class KpiBloc extends Bloc<KpiEvent, KpiState> {
     KpiStreamError event,
     Emitter<KpiState> emit,
   ) async {
-    print('[KpiBloc] Stream error: ${event.message}');
+    AppErrorLogger.log('KpiBloc.streamMessage', event.message);
     emit(KpiError(event.message));
   }
 

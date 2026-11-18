@@ -1,13 +1,20 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/utils/app_error_logger.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../services/push_notification_service.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _repo;
+  final PushNotificationService? _pushNotifications;
 
-  AuthBloc(this._repo) : super(const AuthInitial()) {
+  AuthBloc(
+    this._repo, {
+    PushNotificationService? pushNotifications,
+  })  : _pushNotifications = pushNotifications,
+        super(const AuthInitial()) {
     on<AuthCheckRequested>(_onCheckRequested);
     on<AuthLoginRequested>(_onLoginRequested);
     on<AuthPasswordResetRequested>(_onPasswordResetRequested);
@@ -17,7 +24,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   @override
   void onError(Object error, StackTrace stackTrace) {
-    print('[AuthBloc] Unhandled error: $error');
+    AppErrorLogger.log('AuthBloc.unhandled', error);
     super.onError(error, stackTrace);
   }
 
@@ -40,7 +47,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       emit(AuthAuthenticated(profile));
     } catch (error) {
-      print('[AuthBloc] Failed to restore session: $error');
+      AppErrorLogger.log('AuthBloc.restoreSession', error);
       emit(AuthError('Unable to verify your session. Please try again.'));
     }
   }
@@ -79,17 +86,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       try {
         await _repo.recordSuccessfulLogin(profile.userId);
       } catch (error) {
-        print('[AuthBloc] Could not update last-login timestamp: $error');
+        AppErrorLogger.log('AuthBloc.recordSuccessfulLogin', error);
       }
       emit(AuthAuthenticated(profile));
     } catch (err) {
-      print('[AuthBloc] Login failed: $err');
+      AppErrorLogger.log('AuthBloc.login', err);
       final signedInUid = credential?.user?.uid;
       if (signedInUid != null && _repo.currentUser?.uid == signedInUid) {
         try {
           await _repo.signOut();
         } catch (signOutError) {
-          print('[AuthBloc] Could not clear incomplete login: $signOutError');
+          AppErrorLogger.log('AuthBloc.clearIncompleteLogin', signOutError);
           emit(const AuthError(
             'Sign-in could not finish and the session could not be cleared. '
             'Please restart the app and try again.',
@@ -110,7 +117,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _repo.sendPasswordResetEmail(event.email);
       emit(const AuthPasswordResetSent());
     } catch (error) {
-      print('[AuthBloc] Password reset failed: $error');
+      AppErrorLogger.log('AuthBloc.passwordReset', error);
       emit(AuthError(_mapError(error)));
     }
   }
@@ -120,10 +127,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     try {
+      await _pushNotifications?.unregisterCurrentDevice();
       await _repo.signOut();
       emit(const AuthUnauthenticated());
     } catch (error) {
-      print('[AuthBloc] Logout failed: $error');
+      AppErrorLogger.log('AuthBloc.logout', error);
       final current = state;
       emit(AuthError(
         'Unable to sign out. Please try again.',
@@ -149,7 +157,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
       emit(AuthAuthenticated(updated));
     } catch (err) {
-      print('[AuthBloc] Profile update failed: $err');
+      AppErrorLogger.log('AuthBloc.profileUpdate', err);
       emit(AuthError(
         'Unable to update your profile. Please try again.',
         user: current.user,

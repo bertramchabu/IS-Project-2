@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:web/web.dart' as web;
 
+import 'app_error_logger.dart';
+
 String _lastBlobUrl = '';
 web.AudioContext? _audioContext;
 
@@ -50,7 +52,32 @@ Future<void> playAlertChime() async {
       osc.start(context.currentTime + start);
       osc.stop(context.currentTime + start + dur + 0.05);
     }
-  } catch (_) {
-    // Audio must never break the monitoring flow.
+  } catch (error) {
+    AppErrorLogger.log('AlertAudio.play', error);
+  }
+}
+
+void showPlatformNotification({
+  required String title,
+  required String body,
+  required String tag,
+  required String clickUrl,
+}) {
+  if (web.Notification.permission != 'granted') return;
+  try {
+    final notification = web.Notification(
+      title,
+      web.NotificationOptions(
+        body: body,
+        icon: '/icons/Icon-192.png',
+        tag: tag,
+      ),
+    );
+    notification.onclick = ((web.Event _) {
+      notification.close();
+      web.window.location.href = clickUrl;
+    }).toJS;
+  } catch (error) {
+    AppErrorLogger.log('BrowserNotification.show', error);
   }
 }

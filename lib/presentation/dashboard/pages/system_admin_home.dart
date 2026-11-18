@@ -1,13 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 
+import '../../../core/utils/app_error_logger.dart';
+import '../../../core/utils/csv_util.dart';
+import '../../../core/utils/platform_actions.dart';
+import '../../../data/repositories/audit_repository.dart';
+import '../../../data/repositories/model_inference_repository.dart';
+import '../../../data/repositories/threat_model_inference_repository.dart';
 import '../../../data/models/user_models.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../../auth/bloc/auth_event.dart';
 import '../../auth/bloc/auth_state.dart';
 import '../../auth/widgets/user_profile_dialog.dart';
+import '../../threat_monitoring/pages/threat_monitoring_page.dart';
 import '../../widgets/glass_ui.dart';
+import '../../widgets/browser_notification_button.dart';
+import '../widgets/threat_model_status_card.dart';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 class _AdminColors {
@@ -35,19 +47,165 @@ class SystemAdminHome extends StatefulWidget {
 class _SystemAdminHomeState extends State<SystemAdminHome> {
   int _selectedTabIndex = 0;
 
-  // Threshold configurations state
+  // Threshold configurations state (loaded from systemConfig/thresholds).
   double _globalThreshold = 0.70;
   bool _adaptiveReductionEnabled = true;
   double _reductionThreshold = 0.30;
   int _reductionPercentage = 90;
   bool _isSavingConfig = false;
 
-  // Model Retraining simulation state
-  bool _isRetraining = false;
-  double _trainingProgress = 0.0;
-  String _trainingStatus = 'Ready';
+  // Real model status from the deployed model_status callable.
+  bool _modelLoaded = false;
+  String _modelVersion = 'checking…';
+  double? _modelF1;
+  double? _modelRmse;
+  int? _modelLatencyMs;
+  bool _checkingModel = false;
+  String _modelStatusMessage = 'Not checked yet';
+  late Future<ThreatModelApiStatus> _threatModelStatusFuture;
+
+  // Requesting the offline Python training pipeline (FR-SA-09).
+  bool _requestingRetrain = false;
+
+  // System health card readings.
+  String _authStatus = 'checking…';
+  String _firestoreStatus = 'checking…';
+  String _telemetryStatus = 'checking…';
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final AuditRepository _audit = AuditRepository();
+  final ModelInferenceRepository _modelRepo = ModelInferenceRepository();
+  final ThreatModelInferenceRepository _threatModelRepo =
+      ThreatModelInferenceRepository();
+
+  UserModel? get _currentUser =>
+      authenticatedUserFrom(context.read<AuthBloc>().state);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThresholds();
+    _refreshStatuses();
+    _threatModelStatusFuture = _loadThreatModelStatus();
+  }
+
+  Future<ThreatModelApiStatus> _loadThreatModelStatus() async {
+    try {
+      return await _threatModelRepo.checkStatus();
+    } catch (error) {
+      AppErrorLogger.log('SystemAdminHome.threatModelStatus', error);
+      rethrow;
+    }
+  }
+
+  void _refreshThreatModelStatus() {
+    setState(() => _threatModelStatusFuture = _loadThreatModelStatus());
+  }
+
+  Future<void> _auditLog(String action, String details) async {
+    final user = _currentUser;
+    await _audit.log(
+      userId: user?.userId ?? 'system_admin',
+      userName: user?.username ?? 'System Administrator',
+      action: action,
+      details: details,
+    );
+  }
+
+  Future<void> _loadThresholds() async {
+    try {
+      final doc =
+          await _firestore.collection('systemConfig').doc('thresholds').get();
+      final d = doc.data();
+      if (d != null && mounted) {
+        setState(() {
+          _globalThreshold = (d['globalThreshold'] as num?)?.toDouble() ?? 0.70;
+          _adaptiveReductionEnabled =
+              d['adaptiveReductionEnabled'] as bool? ?? true;
+          _reductionThreshold =
+              (d['reductionThreshold'] as num?)?.toDouble() ?? 0.30;
+          _reductionPercentage =
+              (d['reductionPercentage'] as num?)?.toInt() ?? 90;
+        });
+      }
+    } catch (e) {
+      AppErrorLogger.log('SystemAdminHome.loadThresholds', e);
+    }
+  }
+
+  Future<void> _refreshStatuses() async {
+    setState(() {
+      _authStatus = FirebaseAuth.instance.currentUser != null
+          ? 'Connected'
+          : 'Signed out';
+    });
+    // Firestore round-trip latency.
+    final dbStart = DateTime.now();
+    String dbStatus;
+    try {
+      await _firestore.collection('systemConfig').limit(1).get();
+      dbStatus =
+          'Reachable (${DateTime.now().difference(dbStart).inMilliseconds} ms)';
+    } catch (e) {
+      AppErrorLogger.log('SystemAdminHome.firestoreHealthCheck', e);
+      dbStatus = 'Unreachable';
+    }
+
+    // Model callable latency + metadata.
+    setState(() => _checkingModel = true);
+    final callStart = DateTime.now();
+    String modelHealth;
+    try {
+      final status = await _modelRepo.checkStatus();
+      final latency = DateTime.now().difference(callStart).inMilliseconds;
+      _modelLoaded = status.isModelLoaded;
+      _modelVersion = status.modelVersion;
+      _modelF1 = status.f1Score;
+      _modelRmse = status.rmse;
+      _modelLatencyMs = latency;
+      _modelStatusMessage = status.message;
+      modelHealth = status.isModelLoaded ? 'Online (${latency}ms)' : 'Degraded';
+    } catch (e) {
+      AppErrorLogger.log('SystemAdminHome.modelHealthCheck', e);
+      _modelLoaded = false;
+      _modelVersion = 'unreachable';
+      _modelLatencyMs = null;
+      _modelStatusMessage = 'model_status call failed: $e';
+      modelHealth = 'Offline';
+    }
+
+    // Newest KPI sample freshness (telemetry pipeline).
+    String telemetry;
+    try {
+      final latest = await _firestore
+          .collectionGroup('kpiMetrics')
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+      if (latest.docs.isEmpty) {
+        telemetry = 'No samples yet';
+      } else {
+        final ts =
+            (latest.docs.first.data()['timestamp'] as Timestamp?)?.toDate();
+        telemetry = ts == null
+            ? 'Streaming'
+            : 'Last sample ${DateFormat('HH:mm:ss').format(ts.toLocal())}';
+      }
+    } catch (e) {
+      AppErrorLogger.log('SystemAdminHome.telemetryHealthCheck', e);
+      telemetry = 'Unknown';
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _firestoreStatus = dbStatus;
+      _telemetryStatus = telemetry;
+      _modelHealthCard = modelHealth;
+      _checkingModel = false;
+    });
+  }
+
+  String _modelHealthCard = 'checking…';
 
   @override
   Widget build(BuildContext context) {
@@ -60,71 +218,71 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
       backgroundColor: _AdminColors.bg,
       appBar: _buildAppBar(context, user, username, initials),
       body: GlassBackground(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final content = Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(constraints.maxWidth < 600 ? 16 : 24),
-              child: _buildSelectedTabContent(user),
-            ),
-          );
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final content = Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(constraints.maxWidth < 600 ? 16 : 24),
+                child: _buildSelectedTabContent(user),
+              ),
+            );
 
-          if (constraints.maxWidth < 900) {
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: DropdownButtonFormField<int>(
-                    initialValue: _selectedTabIndex,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Administration section',
-                      border: OutlineInputBorder(),
+            if (constraints.maxWidth < 900) {
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: DropdownButtonFormField<int>(
+                      initialValue: _selectedTabIndex,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Administration section',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 0,
+                          child: Text('User Management'),
+                        ),
+                        DropdownMenuItem(
+                          value: 1,
+                          child: Text('Network Nodes'),
+                        ),
+                        DropdownMenuItem(
+                          value: 2,
+                          child: Text('Thresholds & Adaptive'),
+                        ),
+                        DropdownMenuItem(
+                          value: 3,
+                          child: Text('BiLSTM Model Management'),
+                        ),
+                        DropdownMenuItem(
+                          value: 4,
+                          child: Text('Audit Logs & Health'),
+                        ),
+                      ],
+                      onChanged: (index) {
+                        if (index != null) {
+                          setState(() => _selectedTabIndex = index);
+                        }
+                      },
                     ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 0,
-                        child: Text('User Management'),
-                      ),
-                      DropdownMenuItem(
-                        value: 1,
-                        child: Text('Network Nodes'),
-                      ),
-                      DropdownMenuItem(
-                        value: 2,
-                        child: Text('Thresholds & Adaptive'),
-                      ),
-                      DropdownMenuItem(
-                        value: 3,
-                        child: Text('BiLSTM Model Management'),
-                      ),
-                      DropdownMenuItem(
-                        value: 4,
-                        child: Text('Audit Logs & Health'),
-                      ),
-                    ],
-                    onChanged: (index) {
-                      if (index != null) {
-                        setState(() => _selectedTabIndex = index);
-                      }
-                    },
                   ),
-                ),
+                  content,
+                ],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildNavigationSidebar(),
+                const VerticalDivider(width: 1, color: _AdminColors.border),
                 content,
               ],
             );
-          }
-
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildNavigationSidebar(),
-              const VerticalDivider(width: 1, color: _AdminColors.border),
-              content,
-            ],
-          );
-        },
-      ),
+          },
+        ),
       ),
     );
   }
@@ -169,45 +327,47 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
               ),
               if (!compact)
                 const Text(
-                'System Administration & Governance',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w400,
-                  color: _AdminColors.textMuted,
-                  letterSpacing: 0.4,
+                  'System Administration & Governance',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w400,
+                    color: _AdminColors.textMuted,
+                    letterSpacing: 0.4,
+                  ),
                 ),
-              ),
             ],
           ),
         ],
       ),
       actions: [
+        const BrowserNotificationButton(),
         // Role pill
-        if (!compact) Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: _AdminColors.violet.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _AdminColors.violet.withOpacity(0.3)),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.security_rounded,
-                  size: 14, color: _AdminColors.violet),
-              SizedBox(width: 6),
-              Text(
-                'SYSTEM ADMIN',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  color: _AdminColors.violet,
-                  letterSpacing: 0.8,
+        if (!compact)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: _AdminColors.violet.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: _AdminColors.violet.withOpacity(0.3)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.security_rounded,
+                    size: 14, color: _AdminColors.violet),
+                SizedBox(width: 6),
+                Text(
+                  'SYSTEM ADMIN',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: _AdminColors.violet,
+                    letterSpacing: 0.8,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         if (!compact) const SizedBox(width: 12),
         // Clickable User Profile
         InkWell(
@@ -413,184 +573,188 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
-                  headingRowColor:
-                      WidgetStateProperty.all(_AdminColors.surfaceAlt),
-                  columns: const [
-                    DataColumn(
-                        label: Text('USER',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: _AdminColors.textMuted))),
-                    DataColumn(
-                        label: Text('EMAIL',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: _AdminColors.textMuted))),
-                    DataColumn(
-                        label: Text('ROLE',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: _AdminColors.textMuted))),
-                    DataColumn(
-                        label: Text('STATUS',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: _AdminColors.textMuted))),
-                    DataColumn(
-                        label: Text('MFA',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: _AdminColors.textMuted))),
-                    DataColumn(
-                        label: Text('ACTIONS',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: _AdminColors.textMuted))),
-                  ],
-                  rows: docs.map((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
-                    final username = data['username'] as String? ?? 'User';
-                    final email = data['email'] as String? ?? '';
-                    final roleId =
-                        data['roleId'] as String? ?? 'role_network_admin';
-                    final isActive = data['isActive'] as bool? ?? true;
-                    final mfa = data['mfaEnabled'] as bool? ?? false;
-
-                    final roleLabel = roleId == 'role_system_admin'
-                        ? 'System Administrator'
-                        : roleId == 'role_ict_manager'
-                            ? 'ICT Manager'
-                            : 'Network Administrator';
-
-                    final roleColor = roleId == 'role_system_admin'
-                        ? _AdminColors.violet
-                        : roleId == 'role_ict_manager'
-                            ? _AdminColors.accent
-                            : _AdminColors.healthy;
-
-                    return DataRow(
-                      cells: [
-                        DataCell(
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 12,
-                                backgroundColor: roleColor.withOpacity(0.2),
-                                child: Text(
-                                  username.isNotEmpty
-                                      ? username[0].toUpperCase()
-                                      : 'U',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: roleColor),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(username,
-                                  style: const TextStyle(
-                                      color: _AdminColors.textPrimary,
-                                      fontSize: 12.5,
-                                      fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                        ),
-                        DataCell(Text(email,
-                            style: const TextStyle(
-                                color: _AdminColors.textSecondary,
-                                fontSize: 12))),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: roleColor.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(4),
-                              border:
-                                  Border.all(color: roleColor.withOpacity(0.4)),
-                            ),
-                            child: Text(roleLabel,
-                                style: TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: roleColor)),
-                          ),
-                        ),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: (isActive
-                                      ? _AdminColors.healthy
-                                      : _AdminColors.critical)
-                                  .withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              isActive ? 'Active' : 'Disabled',
+                    headingRowColor:
+                        WidgetStateProperty.all(_AdminColors.surfaceAlt),
+                    columns: const [
+                      DataColumn(
+                          label: Text('USER',
                               style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: isActive
-                                    ? _AdminColors.healthy
-                                    : _AdminColors.critical,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _AdminColors.textMuted))),
+                      DataColumn(
+                          label: Text('EMAIL',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _AdminColors.textMuted))),
+                      DataColumn(
+                          label: Text('ROLE',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _AdminColors.textMuted))),
+                      DataColumn(
+                          label: Text('STATUS',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _AdminColors.textMuted))),
+                      DataColumn(
+                          label: Text('MFA',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _AdminColors.textMuted))),
+                      DataColumn(
+                          label: Text('ACTIONS',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _AdminColors.textMuted))),
+                    ],
+                    rows: docs.map((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final username = data['username'] as String? ?? 'User';
+                      final email = data['email'] as String? ?? '';
+                      final roleId =
+                          data['roleId'] as String? ?? 'role_network_admin';
+                      final isActive = data['isActive'] as bool? ?? true;
+                      final mfa = data['mfaEnabled'] as bool? ?? false;
+
+                      final roleLabel = roleId == 'role_system_admin'
+                          ? 'System Administrator'
+                          : roleId == 'role_ict_manager'
+                              ? 'ICT Manager'
+                              : 'Network Administrator';
+
+                      final roleColor = roleId == 'role_system_admin'
+                          ? _AdminColors.violet
+                          : roleId == 'role_ict_manager'
+                              ? _AdminColors.accent
+                              : _AdminColors.healthy;
+
+                      return DataRow(
+                        cells: [
+                          DataCell(
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 12,
+                                  backgroundColor: roleColor.withOpacity(0.2),
+                                  child: Text(
+                                    username.isNotEmpty
+                                        ? username[0].toUpperCase()
+                                        : 'U',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: roleColor),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(username,
+                                    style: const TextStyle(
+                                        color: _AdminColors.textPrimary,
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                          DataCell(Text(email,
+                              style: const TextStyle(
+                                  color: _AdminColors.textSecondary,
+                                  fontSize: 12))),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: roleColor.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                    color: roleColor.withOpacity(0.4)),
+                              ),
+                              child: Text(roleLabel,
+                                  style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: roleColor)),
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (isActive
+                                        ? _AdminColors.healthy
+                                        : _AdminColors.critical)
+                                    .withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                isActive ? 'Active' : 'Disabled',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isActive
+                                      ? _AdminColors.healthy
+                                      : _AdminColors.critical,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        DataCell(
-                          Icon(
-                            mfa
-                                ? Icons.verified_user_rounded
-                                : Icons.shield_outlined,
-                            size: 16,
-                            color: mfa
-                                ? _AdminColors.healthy
-                                : _AdminColors.textMuted,
+                          DataCell(
+                            Icon(
+                              mfa
+                                  ? Icons.verified_user_rounded
+                                  : Icons.shield_outlined,
+                              size: 16,
+                              color: mfa
+                                  ? _AdminColors.healthy
+                                  : _AdminColors.textMuted,
+                            ),
                           ),
-                        ),
-                        DataCell(
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: Icon(
-                                  isActive
-                                      ? Icons.block_rounded
-                                      : Icons.check_circle_outline,
-                                  size: 16,
-                                  color: isActive
-                                      ? _AdminColors.warning
-                                      : _AdminColors.healthy,
+                          DataCell(
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    isActive
+                                        ? Icons.block_rounded
+                                        : Icons.check_circle_outline,
+                                    size: 16,
+                                    color: isActive
+                                        ? _AdminColors.warning
+                                        : _AdminColors.healthy,
+                                  ),
+                                  tooltip: isActive ? 'Deactivate' : 'Activate',
+                                  onPressed: () async {
+                                    await _firestore
+                                        .collection('users')
+                                        .doc(doc.id)
+                                        .update({'isActive': !isActive});
+                                    await _auditLog(
+                                        AuditActions.userStatusChanged,
+                                        '${isActive ? "Disabled" : "Enabled"} '
+                                        'user $username');
+                                  },
                                 ),
-                                tooltip: isActive ? 'Deactivate' : 'Activate',
-                                onPressed: () async {
-                                  await _firestore
-                                      .collection('users')
-                                      .doc(doc.id)
-                                      .update({'isActive': !isActive});
-                                },
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined,
-                                    size: 16, color: _AdminColors.accent),
-                                tooltip: 'Edit Role',
-                                onPressed: () => _showEditRoleDialog(
-                                    doc.id, username, roleId),
-                              ),
-                            ],
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined,
+                                      size: 16, color: _AdminColors.accent),
+                                  tooltip: 'Edit Role',
+                                  onPressed: () => _showEditRoleDialog(
+                                      doc.id, username, roleId),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
+                        ],
+                      );
+                    }).toList(),
                   ),
                 ),
               ),
@@ -606,6 +770,7 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
     final emailCtrl = TextEditingController();
     final deptCtrl = TextEditingController();
     String selectedRole = 'role_network_admin';
+    var isCreating = false;
 
     showDialog<void>(
       context: context,
@@ -701,28 +866,98 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                       style: TextStyle(color: _AdminColors.textMuted)),
                 ),
                 ElevatedButton(
-                  onPressed: () async {
-                    if (usernameCtrl.text.trim().isEmpty ||
-                        emailCtrl.text.trim().isEmpty) {
-                      return;
-                    }
-                    await _firestore.collection('users').add({
-                      'username': usernameCtrl.text.trim(),
-                      'email': emailCtrl.text.trim(),
-                      'roleId': selectedRole,
-                      'department': deptCtrl.text.trim(),
-                      'isActive': true,
-                      'mfaEnabled': false,
-                      'createdAt': FieldValue.serverTimestamp(),
-                      'updatedAt': FieldValue.serverTimestamp(),
-                    });
-                    if (ctx.mounted) Navigator.pop(ctx);
-                  },
+                  onPressed: isCreating
+                      ? null
+                      : () async {
+                          final username = usernameCtrl.text.trim();
+                          final email = emailCtrl.text.trim();
+                          if (username.isEmpty || email.isEmpty) {
+                            return;
+                          }
+                          setDialogState(() => isCreating = true);
+                          try {
+                            final callable = FirebaseFunctions.instanceFor(
+                              region: 'us-central1',
+                            ).httpsCallable('create_managed_user');
+                            await callable.call({
+                              'username': username,
+                              'email': email,
+                              'role_id': selectedRole,
+                              'department': deptCtrl.text.trim(),
+                            });
+
+                            var resetEmailSent = true;
+                            try {
+                              await FirebaseAuth.instance
+                                  .sendPasswordResetEmail(
+                                email: email,
+                              );
+                            } catch (error) {
+                              resetEmailSent = false;
+                              AppErrorLogger.log(
+                                'SystemAdminHome.passwordSetupEmail',
+                                error,
+                              );
+                            }
+
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    resetEmailSent
+                                        ? 'Account created. Password setup email sent.'
+                                        : 'Account created, but the password setup '
+                                            'email failed. Ask the user to use '
+                                            'Forgot password on the sign-in page.',
+                                  ),
+                                ),
+                              );
+                            }
+                          } on FirebaseFunctionsException catch (error) {
+                            AppErrorLogger.log(
+                              'SystemAdminHome.createManagedUser',
+                              error,
+                            );
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    error.message ??
+                                        'Could not create the user.',
+                                  ),
+                                ),
+                              );
+                            }
+                          } catch (error) {
+                            AppErrorLogger.log(
+                              'SystemAdminHome.createManagedUser',
+                              error,
+                            );
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Could not create the user.'),
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (ctx.mounted) {
+                              setDialogState(() => isCreating = false);
+                            }
+                          }
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _AdminColors.accent,
                     foregroundColor: const Color(0xFF0A0E17),
                   ),
-                  child: const Text('Create User'),
+                  child: isCreating
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Create User'),
                 ),
               ],
             );
@@ -786,6 +1021,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                         .collection('users')
                         .doc(userId)
                         .update({'roleId': selected});
+                    await _auditLog(AuditActions.userRoleChanged,
+                        'Changed role of $username to $selected');
                     if (ctx.mounted) Navigator.pop(ctx);
                   },
                   style: ElevatedButton.styleFrom(
@@ -852,96 +1089,100 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
-                  headingRowColor:
-                      WidgetStateProperty.all(_AdminColors.surfaceAlt),
-                  columns: const [
-                    DataColumn(
-                        label: Text('NODE NAME',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: _AdminColors.textMuted))),
-                    DataColumn(
-                        label: Text('IP ADDRESS',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: _AdminColors.textMuted))),
-                    DataColumn(
-                        label: Text('GEOLOCATION',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: _AdminColors.textMuted))),
-                    DataColumn(
-                        label: Text('TYPE',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: _AdminColors.textMuted))),
-                    DataColumn(
-                        label: Text('MONITORING',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: _AdminColors.textMuted))),
-                  ],
-                  rows: docs.map((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
-                    final name = data['nodeName'] as String? ?? doc.id;
-                    final ip = data['ipAddress'] as String? ?? '0.0.0.0';
-                    final lat = data['latitude'] as num? ?? 0.0;
-                    final lng = data['longitude'] as num? ?? 0.0;
-                    final type = data['nodeType'] as String? ?? 'Gateway';
-                    final isActive = data['isActive'] as bool? ?? true;
+                    headingRowColor:
+                        WidgetStateProperty.all(_AdminColors.surfaceAlt),
+                    columns: const [
+                      DataColumn(
+                          label: Text('NODE NAME',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _AdminColors.textMuted))),
+                      DataColumn(
+                          label: Text('IP ADDRESS',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _AdminColors.textMuted))),
+                      DataColumn(
+                          label: Text('GEOLOCATION',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _AdminColors.textMuted))),
+                      DataColumn(
+                          label: Text('TYPE',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _AdminColors.textMuted))),
+                      DataColumn(
+                          label: Text('MONITORING',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _AdminColors.textMuted))),
+                    ],
+                    rows: docs.map((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final name = data['nodeName'] as String? ?? doc.id;
+                      final ip = data['ipAddress'] as String? ?? '0.0.0.0';
+                      final lat = data['latitude'] as num? ?? 0.0;
+                      final lng = data['longitude'] as num? ?? 0.0;
+                      final type = data['nodeType'] as String? ?? 'Gateway';
+                      final isActive = data['isActive'] as bool? ?? true;
 
-                    return DataRow(
-                      cells: [
-                        DataCell(Text(name,
-                            style: const TextStyle(
-                                color: _AdminColors.textPrimary,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12.5))),
-                        DataCell(Text(ip,
-                            style: const TextStyle(
-                                color: _AdminColors.accent,
-                                fontFamily: 'monospace',
-                                fontSize: 12))),
-                        DataCell(Text(
-                            '${lat.toStringAsFixed(3)}, ${lng.toStringAsFixed(3)}',
-                            style: const TextStyle(
-                                color: _AdminColors.textSecondary,
-                                fontSize: 11.5))),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _AdminColors.surfaceAlt,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: _AdminColors.border),
+                      return DataRow(
+                        cells: [
+                          DataCell(Text(name,
+                              style: const TextStyle(
+                                  color: _AdminColors.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12.5))),
+                          DataCell(Text(ip,
+                              style: const TextStyle(
+                                  color: _AdminColors.accent,
+                                  fontFamily: 'monospace',
+                                  fontSize: 12))),
+                          DataCell(Text(
+                              '${lat.toStringAsFixed(3)}, ${lng.toStringAsFixed(3)}',
+                              style: const TextStyle(
+                                  color: _AdminColors.textSecondary,
+                                  fontSize: 11.5))),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _AdminColors.surfaceAlt,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: _AdminColors.border),
+                              ),
+                              child: Text(type,
+                                  style: const TextStyle(
+                                      fontSize: 10.5,
+                                      color: _AdminColors.textSecondary)),
                             ),
-                            child: Text(type,
-                                style: const TextStyle(
-                                    fontSize: 10.5,
-                                    color: _AdminColors.textSecondary)),
                           ),
-                        ),
-                        DataCell(
-                          Switch(
-                            value: isActive,
-                            activeColor: _AdminColors.healthy,
-                            onChanged: (val) async {
-                              await _firestore
-                                  .collection('networkNodes')
-                                  .doc(doc.id)
-                                  .update({'isActive': val});
-                            },
+                          DataCell(
+                            Switch(
+                              value: isActive,
+                              activeColor: _AdminColors.healthy,
+                              onChanged: (val) async {
+                                await _firestore
+                                    .collection('networkNodes')
+                                    .doc(doc.id)
+                                    .update({'isActive': val});
+                                await _auditLog(
+                                    AuditActions.nodeStatusChanged,
+                                    '${val ? "Enabled" : "Disabled"} '
+                                    'monitoring on node $name');
+                              },
+                            ),
                           ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
+                        ],
+                      );
+                    }).toList(),
                   ),
                 ),
               ),
@@ -1079,6 +1320,10 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                   'isActive': true,
                   'registeredAt': FieldValue.serverTimestamp(),
                 });
+                await _auditLog(
+                    AuditActions.nodeRegistered,
+                    'Registered node ${nameCtrl.text.trim()} '
+                    '(${ipCtrl.text.trim()})');
                 if (ctx.mounted) Navigator.pop(ctx);
               },
               style: ElevatedButton.styleFrom(
@@ -1279,6 +1524,12 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                             'updatedAt': FieldValue.serverTimestamp(),
                             'updatedBy': user?.userId ?? 'admin',
                           });
+                          await _auditLog(
+                            AuditActions.thresholdUpdated,
+                            'Global alert threshold set to '
+                            '${(_globalThreshold * 100).toStringAsFixed(0)}%; '
+                            'adaptive reduction ${_adaptiveReductionEnabled ? "on" : "off"}',
+                          );
                           setState(() => _isSavingConfig = false);
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -1356,10 +1607,13 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _specRow('Active Model Version', 'netvision_bilstm_v1.2.0'),
+                    _specRow('Active Model Version', _modelVersion),
+                    const Divider(height: 14, color: _AdminColors.border),
+                    _specRow('Runtime Status',
+                        _modelLoaded ? 'Loaded in memory' : 'Not loaded'),
                     const Divider(height: 14, color: _AdminColors.border),
                     _specRow('Input Sequence Dimensions',
-                        '30 Timesteps x 5 Multivariate KPIs'),
+                        '10 Timesteps x 5 Multivariate KPIs'),
                     const Divider(height: 14, color: _AdminColors.border),
                     _specRow('Hidden Layers',
                         '2x Bidirectional LSTM (64 Units each)'),
@@ -1369,8 +1623,39 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                     _specRow('Output Layer',
                         'Dense Sigmoid (Fault Probability [0, 1])'),
                     const Divider(height: 14, color: _AdminColors.border),
-                    _specRow('F1-Score / RMSE',
-                        '0.872 / 0.078 (Holds Objective II)'),
+                    _specRow(
+                        'F1-Score / RMSE (held-out test)',
+                        _modelF1 == null || _modelRmse == null
+                            ? 'Unavailable — check the model service'
+                            : '${_modelF1!.toStringAsFixed(4)} / '
+                                '${_modelRmse!.toStringAsFixed(4)} '
+                                '(Objective II met)'),
+                    const Divider(height: 14, color: _AdminColors.border),
+                    _specRow(
+                        'Callable round-trip',
+                        _modelLatencyMs == null
+                            ? '—'
+                            : '${_modelLatencyMs} ms (model_status)'),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _checkingModel ? null : _refreshModelStatus,
+                        icon: const Icon(Icons.refresh_rounded,
+                            size: 15, color: _AdminColors.accent),
+                        label: Text(
+                          _checkingModel ? 'Checking…' : 'Refresh status',
+                          style: const TextStyle(
+                              color: _AdminColors.accent, fontSize: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _modelStatusMessage,
+                      style: const TextStyle(
+                          fontSize: 11, color: _AdminColors.textMuted),
+                    ),
                   ],
                 ),
               ),
@@ -1415,30 +1700,22 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                           height: 1.5),
                     ),
                     const SizedBox(height: 16),
-                    if (_isRetraining) ...[
-                      LinearProgressIndicator(
-                        value: _trainingProgress,
+                    if (_requestingRetrain) ...[
+                      const LinearProgressIndicator(
                         backgroundColor: _AdminColors.surfaceAlt,
                         color: _AdminColors.accent,
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        '$_trainingStatus (${(_trainingProgress * 100).toStringAsFixed(0)}%)',
-                        style: const TextStyle(
-                            fontSize: 11,
-                            fontFamily: 'monospace',
-                            color: _AdminColors.accent),
-                      ),
-                      const SizedBox(height: 16),
                     ],
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: _isRetraining ? null : _triggerRetraining,
+                        onPressed:
+                            _requestingRetrain ? null : _requestModelRetraining,
                         icon: const Icon(Icons.refresh_rounded, size: 16),
-                        label: Text(_isRetraining
-                            ? 'Training in Progress...'
-                            : 'Trigger Model Retraining'),
+                        label: Text(_requestingRetrain
+                            ? 'Queuing request…'
+                            : 'Request Model Retraining'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _AdminColors.violet,
                           foregroundColor: Colors.white,
@@ -1449,48 +1726,102 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Requests are recorded in Firestore and executed by the '
+                      'Python training pipeline (model/src/train.py) by an '
+                      'operator with the training environment.',
+                      style: TextStyle(
+                          fontSize: 10.5, color: _AdminColors.textMuted),
+                    ),
                   ],
                 ),
               ),
             ),
           ],
         ),
+        const SizedBox(height: 18),
+        ThreatModelStatusCard(
+          statusFuture: _threatModelStatusFuture,
+          onRefresh: _refreshThreatModelStatus,
+          onRunDemo: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const ThreatMonitoringPage(
+                runSyntheticDemoOnOpen: true,
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  void _triggerRetraining() async {
+  Future<void> _refreshModelStatus() async {
     setState(() {
-      _isRetraining = true;
-      _trainingProgress = 0.1;
-      _trainingStatus = 'Batch Normalization...';
+      _checkingModel = true;
+      _modelStatusMessage = 'Calling model_status…';
     });
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    setState(() {
-      _trainingProgress = 0.45;
-      _trainingStatus = 'Training Epochs 1-50...';
-    });
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-    setState(() {
-      _trainingProgress = 0.85;
-      _trainingStatus = 'Evaluating Holdout Test Metrics...';
-    });
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    setState(() {
-      _trainingProgress = 1.0;
-      _trainingStatus = 'Completed: F1=0.875, RMSE=0.076';
-      _isRetraining = false;
-    });
+    final start = DateTime.now();
+    try {
+      final status = await _modelRepo.checkStatus();
+      if (!mounted) return;
+      setState(() {
+        _modelLoaded = status.isModelLoaded;
+        _modelVersion = status.modelVersion;
+        _modelF1 = status.f1Score;
+        _modelRmse = status.rmse;
+        _modelLatencyMs = DateTime.now().difference(start).inMilliseconds;
+        _modelStatusMessage = status.message;
+        _modelHealthCard =
+            status.isModelLoaded ? 'Online (${_modelLatencyMs}ms)' : 'Degraded';
+        _checkingModel = false;
+      });
+    } catch (e) {
+      AppErrorLogger.log('SystemAdminHome.refreshModelStatus', e);
+      if (!mounted) return;
+      setState(() {
+        _modelLoaded = false;
+        _modelStatusMessage = 'model_status call failed: $e';
+        _modelHealthCard = 'Offline';
+        _checkingModel = false;
+      });
+    }
+  }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Model retraining completed and new weights deployed!'),
-        backgroundColor: _AdminColors.healthy,
-      ),
-    );
+  Future<void> _requestModelRetraining() async {
+    final user = _currentUser;
+    setState(() => _requestingRetrain = true);
+    try {
+      await _firestore.collection('retrainRequests').add({
+        'requestedBy': user?.userId ?? 'system_admin',
+        'requestedByName': user?.username ?? 'System Administrator',
+        'requestedAt': FieldValue.serverTimestamp(),
+        'status': 'Queued',
+        'note': 'Retrain BiLSTM with accumulated Firestore telemetry',
+      });
+      await _auditLog(
+          AuditActions.retrainRequested, 'Queued BiLSTM retraining request');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Retraining request recorded for the training pipeline'),
+            backgroundColor: _AdminColors.healthy,
+          ),
+        );
+      }
+    } catch (e) {
+      AppErrorLogger.log('SystemAdminHome.requestRetraining', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to record retraining request: $e'),
+            backgroundColor: _AdminColors.critical,
+          ),
+        );
+      }
+    }
+    if (mounted) setState(() => _requestingRetrain = false);
   }
 
   Widget _specRow(String label, String value) {
@@ -1520,33 +1851,40 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
         ),
         const SizedBox(height: 20),
 
-        // 4 Health Cards
+        // 4 Health Cards (live probes)
         Row(
           children: [
             Expanded(
-              child: _healthCard('Firebase Auth', 'Connected',
+              child: _healthCard('Firebase Auth', _authStatus,
                   Icons.vpn_key_rounded, _AdminColors.healthy),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _healthCard('Cloud Firestore', 'Synced (0ms)',
+              child: _healthCard('Cloud Firestore', _firestoreStatus,
                   Icons.storage_rounded, _AdminColors.healthy),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _healthCard('BiLSTM Engine', 'Online (1.4s)',
+              child: _healthCard('BiLSTM Engine', _modelHealthCard,
                   Icons.memory_rounded, _AdminColors.accent),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _healthCard('MQTT Stream', 'Active (1s tick)',
+              child: _healthCard('KPI Telemetry', _telemetryStatus,
                   Icons.sensors_rounded, _AdminColors.healthy),
+            ),
+            const SizedBox(width: 12),
+            IconButton(
+              tooltip: 'Re-probe system health',
+              onPressed: _checkingModel ? null : _refreshStatuses,
+              icon: const Icon(Icons.refresh_rounded,
+                  color: _AdminColors.accent, size: 20),
             ),
           ],
         ),
         const SizedBox(height: 24),
 
-        // Audit Logs List
+        // Audit Logs List from Firestore
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -1557,12 +1895,12 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.receipt_long_rounded,
+                  const Icon(Icons.receipt_long_rounded,
                       color: _AdminColors.textMuted, size: 18),
-                  SizedBox(width: 8),
-                  Text(
+                  const SizedBox(width: 8),
+                  const Text(
                     'RECENT AUDIT LOG ENTRIES',
                     style: TextStyle(
                       fontSize: 11,
@@ -1571,26 +1909,63 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                       color: _AdminColors.textSecondary,
                     ),
                   ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: _exportAuditLogsCsv,
+                    icon: const Icon(Icons.download_rounded,
+                        size: 15, color: _AdminColors.accent),
+                    label: const Text('Export CSV',
+                        style: TextStyle(
+                            color: _AdminColors.accent, fontSize: 12)),
+                  ),
                 ],
               ),
-              const SizedBox(height: 14),
-              _auditLogRow('10:14:22', 'admin@netvision.local',
-                  'THRESHOLD_UPDATE', 'Updated global alert threshold to 70%'),
-              const Divider(height: 12, color: _AdminColors.border),
-              _auditLogRow(
-                  '09:48:05',
-                  'jdoe@netvision.local',
-                  'ALERT_ACKNOWLEDGE',
-                  'Acknowledged critical latency spike on Mombasa-01'),
-              const Divider(height: 12, color: _AdminColors.border),
-              _auditLogRow(
-                  '09:22:18',
-                  'msmith@netvision.local',
-                  'REPORT_EXPORT',
-                  'Exported monthly executive reliability PDF'),
-              const Divider(height: 12, color: _AdminColors.border),
-              _auditLogRow('08:00:10', 'system', 'MODEL_INITIALIZE',
-                  'BiLSTM inference runtime v1.2.0 loaded into memory'),
+              const SizedBox(height: 6),
+              StreamBuilder<List<AuditLogEntry>>(
+                stream: _audit.watchLogs(limit: 50),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Text('Audit stream error: ${snapshot.error}',
+                        style: const TextStyle(
+                            color: _AdminColors.critical, fontSize: 12));
+                  }
+                  if (!snapshot.hasData) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(
+                          child: CircularProgressIndicator(
+                              color: _AdminColors.accent)),
+                    );
+                  }
+                  final entries = snapshot.data!;
+                  if (entries.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 18),
+                      child: Text(
+                        'No recorded actions yet — acknowledgements, user, '
+                        'node and threshold changes appear here.',
+                        style: TextStyle(
+                            color: _AdminColors.textMuted, fontSize: 12),
+                      ),
+                    );
+                  }
+                  final timeFormat = DateFormat('HH:mm:ss');
+                  return Column(
+                    children: [
+                      for (final entry in entries) ...[
+                        _liveAuditLogRow(
+                            timeFormat.format(entry.timestamp.toLocal()),
+                            entry.userName.isNotEmpty
+                                ? entry.userName
+                                : entry.userId,
+                            entry.action,
+                            entry.details),
+                        const Divider(height: 12, color: _AdminColors.border),
+                      ],
+                    ],
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -1634,7 +2009,8 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
     );
   }
 
-  Widget _auditLogRow(String time, String user, String action, String details) {
+  Widget _liveAuditLogRow(
+      String time, String user, String action, String details) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -1674,6 +2050,34 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
         ],
       ),
     );
+  }
+
+  Future<void> _exportAuditLogsCsv() async {
+    try {
+      final entries = await _audit.watchLogs(limit: 200).first;
+      final path = await downloadCsv(
+        timestampFileName('netvision_audit'),
+        encodeCsv(entries.map((e) => e.toCsvRow()).toList()),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exported ${entries.length} audit entries to $path'),
+            backgroundColor: _AdminColors.healthy,
+          ),
+        );
+      }
+    } catch (e) {
+      AppErrorLogger.log('SystemAdminHome.exportAuditLogs', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Audit export failed: $e'),
+            backgroundColor: _AdminColors.critical,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildTabHeader(String title, String subtitle) {

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/utils/app_error_logger.dart';
 
 /// An entry from the auditLogs collection (FR-SA-08, NFR-SE-05).
 class AuditLogEntry {
@@ -26,8 +27,7 @@ class AuditLogEntry {
       userName: d['userName'] as String? ?? 'unknown',
       action: d['action'] as String? ?? '',
       details: d['details'] as String? ?? '',
-      timestamp:
-          (d['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      timestamp: (d['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
 
@@ -80,7 +80,7 @@ class AuditRepository {
         'timestamp': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('[AuditRepository] Failed to write audit log: $e');
+      AppErrorLogger.log('AuditRepository.write', e);
     }
   }
 

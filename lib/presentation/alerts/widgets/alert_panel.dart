@@ -5,9 +5,12 @@ import 'package:intl/intl.dart';
 import '../../../data/models/alert_model.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../../auth/bloc/auth_state.dart';
+import '../../dashboard/bloc/prediction_bloc.dart';
+import '../../dashboard/bloc/prediction_state.dart';
 import '../bloc/alert_bloc.dart';
 import '../bloc/alert_event.dart';
 import '../bloc/alert_state.dart';
+import '../pages/alert_management_page.dart';
 import '../../widgets/web_safe_backdrop_blur.dart';
 
 class AlertPanel extends StatelessWidget {
@@ -97,61 +100,56 @@ class AlertPanel extends StatelessWidget {
                       }
                       if (state is AlertLoaded) {
                         final alerts = state.filteredAlerts;
-                        if (alerts.isEmpty) {
-                          return const Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
+                        return BlocBuilder<PredictionBloc, PredictionState>(
+                          builder: (context, predictionState) {
+                            final replayPrediction =
+                                predictionState is PredictionLoaded &&
+                                        predictionState.predictionSource ==
+                                            'CSV replay demo'
+                                    ? predictionState
+                                    : null;
+                            if (alerts.isEmpty && replayPrediction == null) {
+                              return const _NoActiveAlerts();
+                            }
+                            return ListView(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
                               children: [
-                                Icon(Icons.check_circle_outline_rounded,
-                                    size: 40, color: Color(0xFF22C55E)),
-                                SizedBox(height: 8),
-                                Text(
-                                  'No active alerts',
-                                  style: TextStyle(
-                                    color: Color(0xFF94A3B8),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
+                                if (replayPrediction != null)
+                                  _ReplayPredictionTile(
+                                      state: replayPrediction),
+                                for (var index = 0;
+                                    index < alerts.length;
+                                    index++) ...[
+                                  if (replayPrediction != null || index > 0)
+                                    const Divider(
+                                      height: 1,
+                                      color: Color(0x332F4058),
+                                    ),
+                                  _AlertTile(
+                                    alert: alerts[index],
+                                    onAcknowledge: () {
+                                      final authState =
+                                          context.read<AuthBloc>().state;
+                                      if (authState is AuthAuthenticated) {
+                                        context.read<AlertBloc>().add(
+                                              AlertAcknowledged(
+                                                nodeId: alerts[index].nodeId,
+                                                alertId: alerts[index].alertId,
+                                                userId: authState.user.userId,
+                                              ),
+                                            );
+                                      }
+                                    },
+                                    onDismiss: () => _showDismissDialog(
+                                      context,
+                                      alerts[index].nodeId,
+                                      alerts[index].alertId,
+                                    ),
                                   ),
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  'All network nodes operating nominally',
-                                  style: TextStyle(
-                                    color: Color(0xFF64748B),
-                                    fontSize: 11,
-                                  ),
-                                ),
+                                ],
                               ],
-                            ),
-                          );
-                        }
-                        return ListView.separated(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          itemCount: alerts.length,
-                          separatorBuilder: (_, __) => const Divider(
-                            height: 1,
-                            color: Color(0x332F4058),
-                          ),
-                          itemBuilder: (context, index) => _AlertTile(
-                            alert: alerts[index],
-                            onAcknowledge: () {
-                              final authState = context.read<AuthBloc>().state;
-                              if (authState is AuthAuthenticated) {
-                                context.read<AlertBloc>().add(
-                                      AlertAcknowledged(
-                                        nodeId: alerts[index].nodeId,
-                                        alertId: alerts[index].alertId,
-                                        userId: authState.user.userId,
-                                      ),
-                                    );
-                              }
-                            },
-                            onDismiss: () => _showDismissDialog(
-                              context,
-                              alerts[index].nodeId,
-                              alerts[index].alertId,
-                            ),
-                          ),
+                            );
+                          },
                         );
                       }
                       return const SizedBox.shrink();
@@ -209,6 +207,16 @@ class AlertPanel extends StatelessWidget {
                   ),
                 ),
               const Spacer(),
+              IconButton(
+                tooltip: 'Open full alert management',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.open_in_full_rounded,
+                    size: 18, color: Color(0xFF00E5FF)),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const AlertManagementPage()),
+                ),
+              ),
               PopupMenuButton<AlertStatus?>(
                 icon: const Icon(Icons.filter_list_rounded,
                     size: 18, color: Color(0xFF94A3B8)),
@@ -346,6 +354,94 @@ class AlertPanel extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _NoActiveAlerts extends StatelessWidget {
+  const _NoActiveAlerts();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle_outline_rounded,
+              size: 40, color: Color(0xFF22C55E)),
+          SizedBox(height: 8),
+          Text(
+            'No active alerts',
+            style: TextStyle(
+              color: Color(0xFF94A3B8),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          SizedBox(height: 2),
+          Text(
+            'All network nodes operating nominally',
+            style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReplayPredictionTile extends StatelessWidget {
+  final PredictionLoaded state;
+
+  const _ReplayPredictionTile({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final prediction = state.prediction;
+    final alertTriggered = prediction?.alertTriggered == true;
+    final color =
+        alertTriggered ? const Color(0xFFEF4444) : const Color(0xFF38BDF8);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        border: Border(left: BorderSide(color: color, width: 3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            alertTriggered ? 'REPLAY DEMO ALERT' : 'REPLAY MODEL STATUS',
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.7,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            prediction == null
+                ? state.statusMessage ?? 'Waiting for replay inference.'
+                : alertTriggered
+                    ? 'Fault threshold reached: '
+                        '${prediction.probabilityPercent}. This replay result '
+                        'was not saved to production alerts.'
+                    : 'Replay inference completed; no alert threshold reached '
+                        '(${prediction.probabilityPercent}).',
+            style: const TextStyle(
+                color: Color(0xFFF1F5F9), fontSize: 11, height: 1.4),
+          ),
+          if (!state.modelApiOnline || !state.modelLoaded)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                state.statusMessage ?? 'Model service is offline.',
+                style: const TextStyle(
+                    color: Color(0xFFFCA5A5), fontSize: 10, height: 1.4),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

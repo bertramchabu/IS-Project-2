@@ -88,6 +88,30 @@ void main() {
     expect(find.text('SYS DISCONNECTED'), findsOneWidget);
   });
 
+  testWidgets('keeps API reachability distinct from replay inference errors',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            height: 500,
+            child: FaultGauge(
+              modelApiAvailable: true,
+              modelLoaded: true,
+              statusMessage:
+                  'Replay inference failed: isolated replay is unsupported.',
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('INFERENCE UNAVAILABLE'), findsOneWidget);
+    expect(find.text('SYS DISCONNECTED'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('marks the last prediction when live inference fails',
       (tester) async {
     final prediction = PredictionModel(

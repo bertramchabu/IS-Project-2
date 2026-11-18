@@ -4,9 +4,6 @@ import '../models/prediction_model.dart';
 
 class AlertRepository {
   final FirebaseFirestore _firestore;
-
-  /// FR-AS-05: duplicate alerts for the same node and severity within this
-  /// window are suppressed instead of re-inserted.
   static const duplicateSuppressionWindow = Duration(minutes: 5);
 
   AlertRepository({FirebaseFirestore? firestore})
@@ -112,27 +109,74 @@ class AlertRepository {
     });
   }
 
-  DocumentReference<Map<String, dynamic>> _alertRef(
-    String nodeId,
-    String alertId,
-  ) {
-    return _firestore
-        .collection('networkNodes')
-        .doc(nodeId)
-        .collection('alerts')
-        .doc(alertId);
+  Future<String?> raiseAlertFromPrediction(
+    PredictionModel prediction, {
+    bool simulation = false,
+  }) {
+    final message = prediction.message ??
+        'BiLSTM fault probability ${prediction.probabilityPercent} '
+            'exceeded the alert threshold.';
+    return _raiseModelAlert(
+      nodeId: prediction.nodeId,
+      predictionId: prediction.predictionId,
+      severityId: prediction.severity.severityId,
+      modelProbability: prediction.faultProbability,
+      modelVersionId: prediction.modelVersionId,
+      simulation: simulation,
+      title: simulation
+          ? '[SIMULATION] Predicted fault on ${prediction.nodeId}'
+          : 'Predicted fault on ${prediction.nodeId}',
+      description: simulation ? '[SIMULATION] $message' : message,
+    );
   }
 
-  /// FR-AS-01/03/04: Persist an alert for a prediction whose BiLSTM callable
-  /// response triggered one. Returns the new alert id, or null when a
-  /// duplicate Active alert for the same node and severity already exists
-  /// inside the suppression window (FR-AS-05).
-  Future<String?> raiseAlertFromPrediction(PredictionModel prediction) async {
-    final nodeId = prediction.nodeId;
-    final severityId = prediction.severity.severityId;
+  Future<String?> raiseThreatModelAlert({
+    required String assessmentId,
+    required String nodeId,
+    required String serviceId,
+    required String category,
+    required double confidence,
+    required double? riskWithinForecastHorizon,
+    required String modelVersionId,
+  }) {
+    if (category != 'AVAILABILITY_ANOMALY' && category != 'OPERATIONAL_FAULT') {
+      throw ArgumentError.value(
+        category,
+        'category',
+        'only model-detected anomalies can raise alerts',
+      );
+    }
 
-    // Uses the declared severityId + createdAt collection index; the status
-    // check happens in memory to avoid needing a three-field composite.
+    final severityId = category == 'AVAILABILITY_ANOMALY' ? 'high' : 'medium';
+    final label = category.replaceAll('_', ' ').toLowerCase();
+    final riskText = riskWithinForecastHorizon == null
+        ? 'unavailable'
+        : '${(riskWithinForecastHorizon * 100).toStringAsFixed(1)}%';
+    return _raiseModelAlert(
+      nodeId: nodeId,
+      predictionId: assessmentId,
+      severityId: severityId,
+      modelProbability: confidence,
+      modelVersionId: modelVersionId,
+      simulation: true,
+      title: '[SIMULATION] Threat model detected $label',
+      description: '[SIMULATION] Synthetic cloud model $modelVersionId '
+          'detected $label for $serviceId with '
+          '${(confidence * 100).toStringAsFixed(1)}% confidence; '
+          '10-minute forecast risk: $riskText.',
+    );
+  }
+
+  Future<String?> _raiseModelAlert({
+    required String nodeId,
+    required String predictionId,
+    required String severityId,
+    required double modelProbability,
+    required String modelVersionId,
+    required bool simulation,
+    required String title,
+    required String description,
+  }) async {
     final recent = await _firestore
         .collection('networkNodes')
         .doc(nodeId)
@@ -146,9 +190,18 @@ class AlertRepository {
         )
         .limit(20)
         .get();
-    final duplicate = recent.docs.any(
-        (doc) => (doc.data()['status'] as String?) == 'Active');
-    if (duplicate) return null;
+    if (recent.docs.any((doc) {
+      final data = doc.data();
+      if (data['status'] != 'Active') return false;
+      final isSimulation =
+          (data['title'] as String? ?? '').startsWith('[SIMULATION]');
+      if (isSimulation != simulation) return false;
+      final existingModelVersion = data['modelVersionId'] as String?;
+      return existingModelVersion == null ||
+          existingModelVersion == modelVersionId;
+    })) {
+      return null;
+    }
 
     final doc = await _firestore
         .collection('networkNodes')
@@ -156,18 +209,27 @@ class AlertRepository {
         .collection('alerts')
         .add({
       'nodeId': nodeId,
-      'predictionId': prediction.predictionId,
+      'predictionId': predictionId,
       'severityId': severityId,
       'status': 'Active',
-      'title': 'Predicted fault on $nodeId',
-      'description': prediction.message ??
-          'BiLSTM fault probability ${prediction.probabilityPercent} '
-              'exceeded the alert threshold.',
-      'faultProbability': prediction.faultProbability,
-      'modelVersionId': prediction.modelVersionId,
+      'title': title,
+      'description': description,
+      'faultProbability': modelProbability,
+      'modelVersionId': modelVersionId,
       'createdAt': FieldValue.serverTimestamp(),
     });
     return doc.id;
+  }
+
+  DocumentReference<Map<String, dynamic>> _alertRef(
+    String nodeId,
+    String alertId,
+  ) {
+    return _firestore
+        .collection('networkNodes')
+        .doc(nodeId)
+        .collection('alerts')
+        .doc(alertId);
   }
 
   String _statusId(AlertStatus status) {

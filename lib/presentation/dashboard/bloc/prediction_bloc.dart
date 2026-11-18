@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/utils/app_error_logger.dart';
 import '../../../data/repositories/alert_repository.dart';
 import '../../../data/repositories/prediction_repository.dart';
 import '../../../data/repositories/model_inference_repository.dart';
@@ -29,7 +30,7 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
 
   @override
   void onError(Object error, StackTrace stackTrace) {
-    print('[PredictionBloc] Unhandled error: $error');
+    AppErrorLogger.log('PredictionBloc.unhandled', error);
     super.onError(error, stackTrace);
   }
 
@@ -47,11 +48,11 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
         nodeId: event.nodeId,
         prediction: prediction,
       )),
-      onError: (e) {
-        print('[PredictionBloc] Prediction stream error: $e');
+      onError: (Object error) {
+        AppErrorLogger.log('PredictionBloc.firestoreStream', error);
         add(PredictionStreamFailed(
           nodeId: event.nodeId,
-          message: e.toString(),
+          message: error.toString(),
         ));
       },
     );
@@ -72,14 +73,19 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
     } catch (error, stackTrace) {
       _logModelError('Model API health check failed', error, stackTrace);
       if (_activeNodeId == event.nodeId) {
+        final functionResponded = error is FirebaseFunctionsException &&
+            (error.code == 'permission-denied' ||
+                error.code == 'unauthenticated');
         add(PredictionApiStatusChanged(
           nodeId: event.nodeId,
-          isOnline: false,
+          isOnline: functionResponded,
           isModelLoaded: false,
           modelVersion: 'unknown',
           f1Score: null,
           rmse: null,
-          message: 'Model API is unavailable: $error',
+          message: functionResponded
+              ? 'Model function responded but denied access: $error'
+              : 'Model API is unavailable: $error',
         ));
       }
     }
@@ -127,17 +133,24 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
       final prediction = await _modelRepo.predictLiveMetric(
         nodeId: event.nodeId,
         window: window,
+        demoOnly: event.isReplay,
       );
       if (_activeNodeId != event.nodeId) return;
       final nextInterval = prediction.nextSamplingIntervalSeconds ?? 1.0;
       _nextInferenceAllowedAt = DateTime.now().add(
         Duration(milliseconds: (nextInterval * 1000).round()),
       );
-      if (prediction.alertTriggered && _alerts != null) {
+      if (prediction.alertTriggered &&
+          !prediction.serverPersisted &&
+          _alerts != null) {
         try {
-          await _alerts!.raiseAlertFromPrediction(prediction);
+          await _alerts.raiseAlertFromPrediction(
+            prediction,
+            simulation: event.isReplay,
+          );
         } catch (error, stackTrace) {
-          _logModelError('Failed to persist triggered alert', error, stackTrace);
+          _logModelError(
+              'Failed to persist triggered alert', error, stackTrace);
         }
       }
       emit(PredictionLoaded(
@@ -148,7 +161,8 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
         modelF1Score: prediction.modelF1Score,
         modelRmse: prediction.modelRmse,
         statusMessage: prediction.message,
-        predictionSource: 'Live BiLSTM API',
+        predictionSource:
+            event.isReplay ? 'CSV replay demo' : 'Live BiLSTM API',
       ));
     } catch (error, stackTrace) {
       if (error is ModelSequenceNotReadyException) {
@@ -174,16 +188,19 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
       final current = state;
       emit(PredictionLoaded(
         current is PredictionLoaded ? current.prediction : null,
-        modelApiOnline: false,
-        modelLoaded: false,
+        modelApiOnline: current is PredictionLoaded && current.modelApiOnline,
+        modelLoaded: current is PredictionLoaded && current.modelLoaded,
         modelVersion:
             current is PredictionLoaded ? current.modelVersion : 'unknown',
         modelF1Score: current is PredictionLoaded ? current.modelF1Score : null,
         modelRmse: current is PredictionLoaded ? current.modelRmse : null,
-        statusMessage: 'Live inference failed: $error',
-        predictionSource: current is PredictionLoaded
-            ? current.predictionSource
-            : 'Firestore',
+        statusMessage:
+            '${event.isReplay ? 'Replay' : 'Live'} inference failed: $error',
+        predictionSource: event.isReplay
+            ? 'CSV replay demo'
+            : current is PredictionLoaded
+                ? current.predictionSource
+                : 'Firestore',
       ));
     }
   }
@@ -193,13 +210,7 @@ class PredictionBloc extends Bloc<PredictionEvent, PredictionState> {
     Object error,
     StackTrace stackTrace,
   ) {
-    print('[PredictionBloc] $context: $error');
-    if (error is FirebaseFunctionsException) {
-      print(
-        '[PredictionBloc] Callable error details: '
-        'code=${error.code}, message=${error.message}, details=${error.details}',
-      );
-    }
+    AppErrorLogger.log('PredictionBloc.$context', error);
     print('[PredictionBloc] Error stack trace:\n$stackTrace');
   }
 

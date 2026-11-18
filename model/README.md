@@ -23,11 +23,11 @@ NetVision AI provides proactive network fault anticipation using a lightweight *
 
 ```
 model/
-├── main.py                 # Authenticated Firebase callable model_status/predict_fault
+├── main.py                 # Authenticated fault and simulation-only threat callables
 ├── api/app.py              # Optional local FastAPI inference service
 ├── data/                   # Generated and chronological train/test KPI datasets
-├── models/                 # Keras/TFLite models, scaler, and model metadata
-├── results/                # Evaluation reports and plots
+├── models/                 # Fault artifacts and packaged threat inference artifacts
+├── results/                # Evaluation reports, plots, and generated candidate artifacts
 └── src/
     ├── dataset_generator.py
     ├── model.py            # BiLSTM architecture and built-in-ops TFLite export
@@ -83,3 +83,40 @@ py -3.13 -m pip install -r api\requirements.txt
 py -3.13 -m uvicorn api.app:app --host 127.0.0.1 --port 8000 --reload
 ```
 Open interactive Swagger API docs at: `http://127.0.0.1:8000/docs`
+
+## Separate threat-monitoring evaluation
+
+The threat-monitoring data and evaluation path is separate from the BiLSTM
+fault model above. It does not modify or use the fault-probability output.
+
+The CIC-IDS2017 inputs contain flow rows but no timestamps, site identifiers,
+or service-health labels. The generator partitions source rows and combines
+their numeric flow profiles with explicitly synthetic windows, labels,
+timestamps, and service outcomes. Results are pipeline simulations, not
+evidence of production DDoS detection.
+
+From the `model` directory, with the dependencies in `requirements.txt`
+installed:
+
+```powershell
+.\venv\Scripts\python.exe -m src.threat_monitor_data
+.\venv\Scripts\python.exe -m src.threat_model_evaluation
+.\venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+The generated dataset and manifest are written beneath
+`data/threat/generated/`; evaluation artifacts, raw test predictions, and
+metrics are written beneath `results/threat_monitor/`. The selected calibrated
+tree classifier, availability-risk model, and OOD detector are packaged under
+`models/threat/` for the authenticated `threat_model_status` and
+`predict_threat` callables. The threat callable accepts only windows marked
+`synthetic_demo` with the synthetic demo node/service identifiers and performs
+no writes. When a cloud result classifies an anomaly during replay, the Flutter
+app writes a `[SIMULATION]` alert through the existing role-checked alert
+collection; the feature window and threat assessment are not persisted. The
+threat model remains simulation-only and is not approved for real network
+inference; the unselected temporal candidate remains an offline
+evaluation artifact. See
+[`THREAT_FEATURE_LABEL_SPEC.md`](../docs/THREAT_FEATURE_LABEL_SPEC.md),
+[`THREAT_MODEL_CARD.md`](../docs/THREAT_MODEL_CARD.md), and
+[`THREAT_EVIDENCE_RETENTION.md`](../docs/THREAT_EVIDENCE_RETENTION.md).

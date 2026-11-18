@@ -3,6 +3,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// Severity level of an alert (matches Firestore severityLevels collection).
 enum AlertSeverity { low, medium, high, critical }
 
+extension AlertSeverityId on AlertSeverity {
+  String get severityId => switch (this) {
+        AlertSeverity.low => 'low',
+        AlertSeverity.medium => 'medium',
+        AlertSeverity.high => 'high',
+        AlertSeverity.critical => 'critical',
+      };
+}
+
 /// Lifecycle state of an alert.
 enum AlertStatus { active, acknowledged, dismissed, resolved }
 

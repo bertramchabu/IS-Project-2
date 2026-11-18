@@ -7,6 +7,11 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../../core/utils/app_error_logger.dart';
+import '../../../core/utils/csv_util.dart';
+import '../../../core/utils/platform_actions.dart';
+import '../../../data/models/kpi_metric_model.dart';
+import '../../../data/models/prediction_model.dart';
 import '../../../data/models/user_models.dart';
 import '../../../data/repositories/model_inference_repository.dart';
 import '../../../di/service_locator.dart' as di;
@@ -58,7 +63,7 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
     'Last 24 Hours',
     'Last 7 Days',
     'Last 30 Days',
-    'Quarter-to-Date (Q3)',
+    'Quarter-to-Date',
   ];
 
   @override
@@ -76,24 +81,82 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
     try {
       return await _modelRepository.checkStatus();
     } catch (error) {
-      print('[ICTManagerHome] Model API status check failed: $error');
+      AppErrorLogger.log('ICTManagerHome.modelStatus', error);
       rethrow;
     }
+  }
+
+  ({DateTime start, DateTime end}) _selectedReportWindow() {
+    final end = DateTime.now().toUtc();
+    final start = switch (_selectedDateRange) {
+      'Last 24 Hours' => end.subtract(const Duration(hours: 24)),
+      'Last 7 Days' => end.subtract(const Duration(days: 7)),
+      'Quarter-to-Date' => DateTime.utc(
+          end.year,
+          ((end.month - 1) ~/ 3) * 3 + 1,
+        ),
+      _ => end.subtract(const Duration(days: 30)),
+    };
+    return (start: start, end: end);
+  }
+
+  Future<_ReportData> _loadReportData() async {
+    final window = _selectedReportWindow();
+    final start = Timestamp.fromDate(window.start);
+    final end = Timestamp.fromDate(window.end);
+    final results = await Future.wait<QuerySnapshot<Map<String, dynamic>>>([
+      _firestore
+          .collectionGroup('kpiMetrics')
+          .where('timestamp', isGreaterThanOrEqualTo: start)
+          .where('timestamp', isLessThan: end)
+          .get(),
+      _firestore
+          .collectionGroup('predictions')
+          .where('predictionTimestamp', isGreaterThanOrEqualTo: start)
+          .where('predictionTimestamp', isLessThan: end)
+          .get(),
+      _firestore.collection('networkNodes').get(),
+    ]);
+
+    final kpiSnapshot = results[0];
+    final predictionSnapshot = results[1];
+    final nodeSnapshot = results[2];
+
+    String nodeIdFor(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+      final nodeId = doc.reference.parent.parent?.id;
+      if (nodeId == null) {
+        throw StateError(
+            'Report record ${doc.id} is not under a network node.');
+      }
+      return nodeId;
+    }
+
+    return _ReportData(
+      windowStart: window.start,
+      windowEnd: window.end,
+      activeNodeCount: nodeSnapshot.docs
+          .where((doc) => doc.data()['isActive'] as bool? ?? true)
+          .length,
+      metrics: [
+        for (final doc in kpiSnapshot.docs)
+          KpiMetricModel.fromFirestore(doc, nodeIdFor(doc)),
+      ],
+      predictions: [
+        for (final doc in predictionSnapshot.docs)
+          PredictionModel.fromFirestore(doc, nodeIdFor(doc)),
+      ],
+    );
   }
 
   Future<void> _exportPdfReport(UserModel? user) async {
     setState(() => _isExporting = true);
     try {
-      final nodesSnapshot = await _firestore.collection('networkNodes').get();
-      final activeNodeCount = nodesSnapshot.docs
-          .where((doc) => doc.data()['isActive'] as bool? ?? true)
-          .length;
+      final reportData = await _loadReportData();
       ModelApiStatus? modelStatus;
       try {
         modelStatus = await _modelRepository.checkStatus();
       } catch (error) {
-        print(
-            '[ICTManagerHome] Could not include model status in report: $error');
+        AppErrorLogger.log('ICTManagerHome.reportModelStatus', error);
       }
       final modelReady =
           modelStatus?.isOnline == true && modelStatus?.isModelLoaded == true;
@@ -160,11 +223,13 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
               ),
               pw.SizedBox(height: 6),
               pw.Text(
-                'This report summarizes current monitored infrastructure. '
-                '$activeNodeCount active nodes are registered. '
-                'The selected range ($_selectedDateRange) is not applied to historical data. '
-                'Uptime, MTBF, prevention totals, and user-reported usability are not '
-                'calculated from the current Firestore telemetry and are not represented as measured results.',
+                'This report covers ${DateFormat('MMM d, yyyy HH:mm').format(reportData.windowStart.toLocal())} '
+                'through ${DateFormat('MMM d, yyyy HH:mm').format(reportData.windowEnd.toLocal())}. '
+                '${reportData.activeNodeCount} active nodes are registered. '
+                'The selected window contains ${reportData.metrics.length} KPI samples '
+                'and ${reportData.predictions.length} persisted model predictions. '
+                'Uptime, MTBF, and false-positive rates are not inferred because the '
+                'required ground-truth records are not available.',
                 style: const pw.TextStyle(fontSize: 10),
               ),
               pw.SizedBox(height: 14),
@@ -199,14 +264,14 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                   [
                     'Active network nodes',
                     'Live inventory',
-                    '$activeNodeCount',
+                    '${reportData.activeNodeCount}',
                     'Firestore count'
                   ],
                   [
-                    'Average latency / jitter / packet loss',
-                    'Live KPI telemetry',
-                    'Not aggregated',
-                    'Unavailable'
+                    'KPI samples in selected window',
+                    'Persisted telemetry',
+                    '${reportData.metrics.length}',
+                    reportData.metrics.isEmpty ? 'No data' : 'Measured'
                   ],
                 ],
                 headerStyle:
@@ -218,9 +283,32 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
               ),
               pw.SizedBox(height: 14),
 
+              if (_includeChartsInReport) ...[
+                pw.Text(
+                  '3. KPI Summary',
+                  style: pw.TextStyle(
+                      fontSize: 14, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 8),
+                pw.TableHelper.fromTextArray(
+                  headers: ['Metric', 'Samples', 'Average', 'Peak', 'Unit'],
+                  data: [
+                    for (final type in MetricType.values)
+                      _metricSummaryRow(reportData.metrics, type),
+                  ],
+                  headerStyle:
+                      pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+                  cellStyle: const pw.TextStyle(fontSize: 9),
+                  headerDecoration:
+                      const pw.BoxDecoration(color: PdfColors.grey200),
+                  cellHeight: 22,
+                ),
+                pw.SizedBox(height: 14),
+              ],
+
               // Model performance table
               pw.Text(
-                '3. BiLSTM Model Status and Evaluation',
+                '4. BiLSTM Model Status and Evaluation',
                 style:
                     pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
               ),
@@ -261,9 +349,9 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                   ],
                   [
                     'Adaptive inference reduction',
-                    '90% below 30% risk',
-                    modelReady ? 'Configured' : 'Not verified',
-                    modelReady ? 'Available' : 'Unavailable'
+                    'Configured by deployed function',
+                    modelReady ? 'Available' : 'Not verified',
+                    modelReady ? 'Model online' : 'Unavailable'
                   ],
                 ],
                 headerStyle:
@@ -275,26 +363,50 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
               ),
               pw.SizedBox(height: 14),
 
-              // Recommendations
               pw.Text(
-                '4. Management Recommendations',
+                '5. Prediction Activity',
+                style:
+                    pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 8),
+              pw.TableHelper.fromTextArray(
+                headers: ['Measure', 'Result'],
+                data: [
+                  ['Persisted predictions', '${reportData.predictions.length}'],
+                  [
+                    'Predictions above 70% probability',
+                    '${reportData.predictions.where((p) => p.faultProbability >= 0.70).length}',
+                  ],
+                  [
+                    'Average fault probability',
+                    reportData.predictions.isEmpty
+                        ? 'No data'
+                        : '${(reportData.predictions.map((p) => p.faultProbability).reduce((a, b) => a + b) / reportData.predictions.length * 100).toStringAsFixed(1)}%',
+                  ],
+                ],
+                headerStyle:
+                    pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+                headerDecoration:
+                    const pw.BoxDecoration(color: PdfColors.grey200),
+                cellHeight: 22,
+              ),
+              pw.SizedBox(height: 14),
+
+              pw.Text(
+                '6. Data Limitations',
                 style:
                     pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
               ),
               pw.SizedBox(height: 6),
               pw.Bullet(
                 text:
-                    'Maintain the adaptive 70% fault probability threshold for automated technician dispatch.',
+                    'Alert thresholds and prediction outcomes are model outputs, not verified incidents.',
                 style: const pw.TextStyle(fontSize: 9),
               ),
               pw.Bullet(
                 text:
-                    'Expand edge node registration to Western and Coastal regional data corridors.',
-                style: const pw.TextStyle(fontSize: 9),
-              ),
-              pw.Bullet(
-                text:
-                    'Retain quarterly model retraining schedule with ongoing real-time multivariate logs.',
+                    'Uptime, MTBF, detection lead time, false-positive rate, and SLA compliance require incident and service-availability ground truth.',
                 style: const pw.TextStyle(fontSize: 9),
               ),
             ];
@@ -308,7 +420,7 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
             'NetVision_AI_Executive_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
       );
     } catch (e) {
-      print('[ICTManagerHome] Error generating PDF: $e');
+      AppErrorLogger.log('ICTManagerHome.exportPdf', e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -322,22 +434,104 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
     }
   }
 
-  void _exportCsvData() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.download_done_rounded,
-                color: _ICTColors.healthy, size: 18),
-            SizedBox(width: 8),
-            Text(
-                'Historical KPI & Prediction Logs exported to CSV successfully'),
-          ],
-        ),
-        backgroundColor: _ICTColors.surfaceAlt,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  List<String> _metricSummaryRow(
+    List<KpiMetricModel> metrics,
+    MetricType type,
+  ) {
+    final matching = metrics.where((metric) => metric.metricType == type);
+    if (matching.isEmpty) {
+      return [type.name, '0', 'No data', 'No data', ''];
+    }
+    final values = matching.map((metric) => metric.value).toList();
+    final average = values.reduce((a, b) => a + b) / values.length;
+    final peak = values.reduce((a, b) => a > b ? a : b);
+    final unit = matching.first.unit;
+    return [
+      matching.first.displayName,
+      '${values.length}',
+      average.toStringAsFixed(2),
+      peak.toStringAsFixed(2),
+      unit,
+    ];
+  }
+
+  Future<void> _exportCsvData() async {
+    setState(() => _isExporting = true);
+    try {
+      final reportData = await _loadReportData();
+      final rows = <Map<String, Object?>>[
+        for (final metric in reportData.metrics)
+          {
+            'record_type': 'kpi',
+            'node_id': metric.nodeId,
+            'timestamp': metric.timestamp.toUtc().toIso8601String(),
+            'metric': metric.metricTypeId,
+            'value': metric.value,
+            'unit': metric.unit,
+            'fault_probability': '',
+            'severity': '',
+            'model_version': '',
+            'alert_triggered': '',
+          },
+        for (final prediction in reportData.predictions)
+          {
+            'record_type': 'prediction',
+            'node_id': prediction.nodeId,
+            'timestamp':
+                prediction.predictionTimestamp.toUtc().toIso8601String(),
+            'metric': '',
+            'value': '',
+            'unit': '',
+            'fault_probability': prediction.faultProbability,
+            'severity': prediction.severityLabel,
+            'model_version': prediction.modelVersionId,
+            'alert_triggered': prediction.alertTriggered,
+          },
+      ];
+      final csv = encodeCsv(
+        rows,
+        headers: const [
+          'record_type',
+          'node_id',
+          'timestamp',
+          'metric',
+          'value',
+          'unit',
+          'fault_probability',
+          'severity',
+          'model_version',
+          'alert_triggered',
+        ],
+      );
+      final fileName = timestampFileName(
+        'netvision_${_selectedDateRange.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_')}',
+      );
+      final location = await downloadCsv(fileName, csv);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(rows.isEmpty
+                ? 'No KPI or prediction records found for this time window. Empty CSV saved to $location'
+                : 'Exported ${reportData.metrics.length} KPI samples and '
+                    '${reportData.predictions.length} predictions to $location'),
+            backgroundColor: _ICTColors.surfaceAlt,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (error) {
+      AppErrorLogger.log('ICTManagerHome.exportCsv', error);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not export report data: $error'),
+            backgroundColor: _ICTColors.critical,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
   }
 
   @override
@@ -352,7 +546,8 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
       appBar: _buildAppBar(context, user, username, initials),
       body: GlassBackground(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding:
+              EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 16 : 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -554,27 +749,33 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
           ),
         ),
         const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: _ICTColors.textPrimary,
-                letterSpacing: -0.2,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: _ICTColors.textPrimary,
+                  letterSpacing: -0.2,
+                ),
               ),
-            ),
-            Text(
-              subtitle,
-              style: const TextStyle(
-                fontSize: 11.5,
-                color: _ICTColors.textMuted,
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: _ICTColors.textMuted,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -1162,7 +1363,7 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                 alignment: WrapAlignment.end,
                 children: [
                   OutlinedButton.icon(
-                    onPressed: _exportCsvData,
+                    onPressed: _isExporting ? null : _exportCsvData,
                     icon: const Icon(Icons.table_chart_outlined, size: 16),
                     label: const Text('Export to CSV'),
                     style: OutlinedButton.styleFrom(
@@ -1319,10 +1520,9 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  '• Node health and alert trends are read from live Firestore streams.\n'
-                  '• Model version, F1-score, and RMSE are read from the inference API metadata.\n'
-                  '• Uptime, MTBF, detection lead time, false-positive rate, and SUS are not currently computed from stored records.\n'
-                  '• Reports label unavailable metrics explicitly rather than presenting demo values as measurements.',
+                  '• Exports use persisted KPI and prediction records in the selected time window.\n'
+                  '• Model version, F1-score, and RMSE are read from inference API metadata.\n'
+                  '• Uptime, MTBF, detection lead time, false-positive rate, and SLA compliance require ground-truth incident data.',
                   style: TextStyle(
                     fontSize: 12,
                     color: _ICTColors.textSecondary,
@@ -1422,7 +1622,7 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
               ),
               const Expanded(
                 child: Text(
-                  'Embed KPI Charts',
+                  'Include KPI summary',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: _ICTColors.textPrimary, fontSize: 12),
@@ -1434,4 +1634,20 @@ class _ICTManagerHomeState extends State<ICTManagerHome> {
       ],
     );
   }
+}
+
+class _ReportData {
+  const _ReportData({
+    required this.windowStart,
+    required this.windowEnd,
+    required this.activeNodeCount,
+    required this.metrics,
+    required this.predictions,
+  });
+
+  final DateTime windowStart;
+  final DateTime windowEnd;
+  final int activeNodeCount;
+  final List<KpiMetricModel> metrics;
+  final List<PredictionModel> predictions;
 }

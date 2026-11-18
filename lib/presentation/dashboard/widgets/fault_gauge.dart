@@ -10,6 +10,7 @@ class FaultGauge extends StatelessWidget {
   final List<KpiMetricModel> metrics;
   final String? predictionSource;
   final bool modelApiAvailable;
+  final bool modelLoaded;
   final String? statusMessage;
   final double? modelF1Score;
   final VoidCallback? onRetry;
@@ -20,6 +21,7 @@ class FaultGauge extends StatelessWidget {
     this.metrics = const [],
     this.predictionSource,
     this.modelApiAvailable = false,
+    this.modelLoaded = false,
     this.statusMessage,
     this.modelF1Score,
     this.onRetry,
@@ -40,7 +42,11 @@ class FaultGauge extends StatelessWidget {
         ? (modelApiAvailable ? _accentCyan : _textMuted)
         : _severityColor(prediction!.severity);
 
-    final statusText = _statusText(hasPrediction, probability);
+    final inferenceFailed =
+        statusMessage?.toLowerCase().contains('inference failed') ?? false;
+    final statusText = inferenceFailed
+        ? 'INFERENCE UNAVAILABLE'
+        : _statusText(hasPrediction, probability);
     final thresholdExceeded = hasPrediction && probability >= 0.70;
 
     return LayoutBuilder(
@@ -95,7 +101,11 @@ class FaultGauge extends StatelessWidget {
                       _Header(
                         sevColor: sevColor,
                         label: prediction?.severityLabel ??
-                            (modelApiAvailable ? 'BUFFERING' : 'OFFLINE'),
+                            (!modelApiAvailable
+                                ? 'OFFLINE'
+                                : modelLoaded
+                                    ? 'BUFFERING'
+                                    : 'NOT READY'),
                       ),
                       const SizedBox(height: 8),
 
@@ -143,6 +153,7 @@ class FaultGauge extends StatelessWidget {
                       _FooterInfo(
                         prediction: prediction,
                         modelApiAvailable: modelApiAvailable,
+                        modelLoaded: modelLoaded,
                         statusMessage: statusMessage,
                         modelF1Score: modelF1Score,
                         metrics: metrics,
@@ -164,7 +175,8 @@ class FaultGauge extends StatelessWidget {
 
   String _statusText(bool hasPrediction, double probability) {
     if (!hasPrediction) {
-      return modelApiAvailable ? 'AWAITING KPI STREAM' : 'SYS DISCONNECTED';
+      if (!modelApiAvailable) return 'SYS DISCONNECTED';
+      return modelLoaded ? 'AWAITING KPI STREAM' : 'MODEL NOT READY';
     }
     if (probability >= 0.70) return 'CRITICAL THRESHOLD';
     if (probability >= 0.40) return 'ELEVATED RISK';
@@ -322,6 +334,7 @@ class _GaugeReadout extends StatelessWidget {
 class _FooterInfo extends StatelessWidget {
   final PredictionModel? prediction;
   final bool modelApiAvailable;
+  final bool modelLoaded;
   final String? statusMessage;
   final double? modelF1Score;
   final List<KpiMetricModel> metrics;
@@ -333,6 +346,7 @@ class _FooterInfo extends StatelessWidget {
   const _FooterInfo({
     required this.prediction,
     required this.modelApiAvailable,
+    required this.modelLoaded,
     required this.statusMessage,
     required this.modelF1Score,
     required this.metrics,
@@ -347,10 +361,11 @@ class _FooterInfo extends StatelessWidget {
     final showMetrics = (modelF1Score != null ||
             prediction?.computationalSavingsPercent != null) &&
         !isTight;
-    final displayMessage =
-        statusMessage?.startsWith('Live inference failed:') == true
-            ? statusMessage!
-            : prediction?.message ?? statusMessage ?? 'Awaiting telemetry...';
+    final inferenceFailed =
+        statusMessage?.toLowerCase().contains('inference failed') ?? false;
+    final displayMessage = inferenceFailed
+        ? statusMessage!
+        : prediction?.message ?? statusMessage ?? 'Awaiting telemetry...';
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: isTight ? 8 : 10),
@@ -369,7 +384,7 @@ class _FooterInfo extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'BiLSTM ${prediction?.modelVersionId ?? (modelApiAvailable ? 'LOADING' : 'OFFLINE')}',
+                  'BiLSTM ${prediction?.modelVersionId ?? (!modelApiAvailable ? 'OFFLINE' : modelLoaded ? 'READY' : 'NOT READY')}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -399,7 +414,7 @@ class _FooterInfo extends StatelessWidget {
               Expanded(
                 child: Text(
                   displayMessage,
-                  maxLines: 1,
+                  maxLines: inferenceFailed ? 2 : 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 10,
@@ -408,7 +423,7 @@ class _FooterInfo extends StatelessWidget {
                   ),
                 ),
               ),
-              if (!modelApiAvailable && onRetry != null)
+              if ((!modelApiAvailable || inferenceFailed) && onRetry != null)
                 GestureDetector(
                   onTap: onRetry,
                   child: Icon(
@@ -494,7 +509,7 @@ class _PredictionSourceReadout extends StatelessWidget {
     final sourceLabel =
         source == 'Live BiLSTM API' ? 'MODEL API' : source.toUpperCase();
     final isStale =
-        statusMessage?.startsWith('Live inference failed:') ?? false;
+        statusMessage?.toLowerCase().contains('inference failed') ?? false;
     final inputAge = inputTimestamp == null
         ? null
         : DateTime.now().difference(inputTimestamp!);
