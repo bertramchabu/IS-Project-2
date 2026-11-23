@@ -31,8 +31,29 @@ class AppRouter {
         return const ICTManagerHome();
       case UserRole.systemAdministrator:
         return const SystemAdminHome();
+      case UserRole.unknown:
+        return const _UnknownRoleScreen();
     }
   }
 
 
+}
+
+class _UnknownRoleScreen extends StatelessWidget {
+  const _UnknownRoleScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Your account role is not recognised. Contact your system administrator.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
 }

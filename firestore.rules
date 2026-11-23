@@ -38,7 +38,9 @@ service cloud.firestore {
         && (request.auth.uid == userId || isSystemAdmin());
       allow list: if isSystemAdmin();
       allow create, delete: if isSystemAdmin();
-      allow update: if isSystemAdmin()
+      allow update: if (isSystemAdmin()
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['mfaEnabled']))
         || (signedIn()
           && request.auth.uid == userId
           && request.resource.data.diff(resource.data).affectedKeys()
@@ -46,7 +48,6 @@ service cloud.firestore {
               'username',
               'department',
               'phoneNumber',
-              'mfaEnabled',
               'lastLogin',
               'updatedAt'
             ]));

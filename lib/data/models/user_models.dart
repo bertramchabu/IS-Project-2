@@ -4,7 +4,8 @@ import 'package:equatable/equatable.dart';
 enum UserRole {
   networkAdministrator('role_network_admin', 'Network Administrator'),
   ictManager('role_ict_manager', 'ICT Manager'),
-  systemAdministrator('role_system_admin', 'System Administrator');
+  systemAdministrator('role_system_admin', 'System Administrator'),
+  unknown('role_unknown', 'Unknown Role');
 
   const UserRole(this.roleId, this.displayName);
 
@@ -20,7 +21,7 @@ enum UserRole {
       case 'role_system_admin':
         return UserRole.systemAdministrator;
       default:
-        return UserRole.networkAdministrator;
+        return UserRole.unknown;
     }
   }
 }

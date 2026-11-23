@@ -363,10 +363,15 @@ def _threat_feature_vector(feature_window: Any) -> list[float]:
 
 def _require_threat_admin(request: https_fn.CallableRequest) -> dict[str, Any]:
     profile = _require_active_user(request)
-    if profile.get("roleId") not in {"role_network_admin", "role_system_admin"}:
+    role_id = profile.get("roleId")
+    if role_id not in {"role_network_admin", "role_system_admin"}:
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-            message="Network or system administrator access is required for threat inference.",
+            message=(
+                "Unknown user role."
+                if role_id not in MANAGED_USER_ROLES
+                else "Network or system administrator access is required for threat inference."
+            ),
         )
     return profile
 
@@ -407,10 +412,15 @@ def _require_active_user(request: https_fn.CallableRequest) -> dict[str, Any]:
 
 def _require_network_admin(request: https_fn.CallableRequest) -> dict[str, Any]:
     profile = _require_active_user(request)
-    if profile.get("roleId") not in {"role_network_admin", "role_system_admin"}:
+    role_id = profile.get("roleId")
+    if role_id not in {"role_network_admin", "role_system_admin"}:
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-            message="Network administrator access is required for fault inference.",
+            message=(
+                "Unknown user role."
+                if role_id not in MANAGED_USER_ROLES
+                else "Network administrator access is required for fault inference."
+            ),
         )
     return profile
 
@@ -489,10 +499,15 @@ def _normalize_managed_user(data: Any) -> dict[str, str | None]:
 
 def _require_system_admin(request: https_fn.CallableRequest) -> dict[str, Any]:
     profile = _require_active_user(request)
-    if profile.get("roleId") != "role_system_admin":
+    role_id = profile.get("roleId")
+    if role_id != "role_system_admin":
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-            message="System administrator access is required.",
+            message=(
+                "Unknown user role."
+                if role_id not in MANAGED_USER_ROLES
+                else "System administrator access is required."
+            ),
         )
     return profile
 

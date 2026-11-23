@@ -14,6 +14,7 @@ import numpy as np
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException
+import os
 from fastapi.middleware.cors import CORSMiddleware
 from tensorflow import keras
 
@@ -29,9 +30,17 @@ app = FastAPI(
 )
 
 # Enable CORS for Flutter Web Dashboard
+allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get(
+        "FASTAPI_ALLOWED_ORIGINS",
+        "http://localhost:8000",
+    ).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

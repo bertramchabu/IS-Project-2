@@ -1050,7 +1050,10 @@ android/
 2. Retraining can now be invoked through `process_retrain_request`, but a real
    executed training run was not verified in this environment. The runner dry-run
    is verified and full execution remains a Firebase/runtime operation.
-3. The threat model is synthetic and cannot be treated as production threat
+3. Unknown role IDs are denied by server checks and routed to a Contact
+   Administrator screen.
+4. MFA status remains stored but is not a verified Firebase second-factor workflow.
+5. The threat model is synthetic and cannot be treated as production threat
    detection.
 4. Threat replay creates `[SIMULATION]` alerts but does not persist replay feature
    windows or assessments through the cloud demo path.
