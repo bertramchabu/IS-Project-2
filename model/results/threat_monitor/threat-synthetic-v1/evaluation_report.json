@@ -1,6 +1,6 @@
 {
   "report_version": "threat-evaluation-v1",
-  "evaluation_timestamp_utc": "2026-11-13T07:12:57.193911+00:00",
+  "evaluation_timestamp_utc": "2026-11-23T14:37:01.328605+00:00",
   "evaluation_scope": "synthetic simulation only; not production efficacy",
   "dataset_version": "threat-synthetic-v1",
   "dataset_sha256": "cde1c2cd19230bf70cb2c3966a915d7a98c6ed19a17ce1eb56bc68f8a662b773",
@@ -68,7 +68,7 @@
       "This dataset is for pipeline testing only and cannot establish production detection efficacy."
     ]
   },
-  "code_revision": "baa04db13051642c2eb223f78a66dea0a2f2a64e",
+  "code_revision": "d6e1f38135357aac0402629c28499c5ed6f7e150",
   "code_worktree_source_sha256": "c20c88fa38f0f1c6b822cb57e6268ea6fc3d6130eca6bf7c17d035fb370fe281",
   "config": {
     "seed": 42,
@@ -379,7 +379,7 @@
           "incident_count": 2
         }
       },
-      "inference_latency_ms_per_window": 0.006019696968607765
+      "inference_latency_ms_per_window": 0.007101515147350113
     },
     "tree": {
       "per_class": {
@@ -662,7 +662,7 @@
           "incident_count": 2
         }
       },
-      "inference_latency_ms_per_window": 0.022279614325974858,
+      "inference_latency_ms_per_window": 0.20335853994104333,
       "validation_selected_abstain_threshold": 0.35,
       "validation_macro_f1_at_selected_threshold": 1.0,
       "ood_windows_abstained": 13
@@ -948,7 +948,7 @@
           "incident_count": 2
         }
       },
-      "inference_latency_ms_per_window": 0.0017360881534571016,
+      "inference_latency_ms_per_window": 0.0051657024872958784,
       "validation_selected_abstain_threshold": 0.35,
       "validation_macro_f1_at_selected_threshold": 1.0,
       "ood_windows_abstained": 13
@@ -963,9 +963,9 @@
     "negative_windows": 635
   },
   "artifact_sha256": {
-    "tree": "1e70385b1c8c0532f8007137b52f70511a8f57edf2d01c85e97f717bba26b2a8",
+    "tree": "84483a773946c1e2026191854c29629f1135c29a45a896ee29e885181d0f741c",
     "temporal": "181225cc320703c72d0d9ec145094c6fac27c7a4c629ac7eb5274ab936a52c07",
-    "risk": "5a7a92322faea3d7080403d3f7e2be2c20763ce96915c7c166014b4715326e71",
+    "risk": "1aaee8f824920818bac93d81f153fcade5e772c662acc6c53fac4150a6ba950b",
     "ood": "1a7b509680aee167c3574b96637e88b8dedfab1df0b0a597440c3f2b43eb6a54"
   },
   "raw_test_predictions": "test_predictions.csv",
