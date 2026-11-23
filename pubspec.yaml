@@ -50,4 +50,5 @@ flutter:
   assets:
     - assets/models/
     - assets/icons/
+    - assets/simulation/
     - model/data/network_kpi_dataset.csv
