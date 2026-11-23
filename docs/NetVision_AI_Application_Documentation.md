@@ -338,8 +338,13 @@ remain active independently of the adaptive sampling setting.
 
 Live replay reads `model/data/network_kpi_dataset.csv`, containing sorted source
 locations and the five KPI fields. The app loads the first four locations in
-source-ID order and maps them to the first four active Firebase locations in
-alphabetical node-ID order.
+source-ID order and maps them to the first four active Firebase nodes sorted by
+node name, with node ID as a tie-breaker.
+
+The 33-device organizational network described in the research report is an
+evaluation scenario, not preloaded Firestore content. Demo nodes must be
+registered in the configured Firebase project; the CSV provides four local
+telemetry source locations and does not create node or KPI documents.
 
 When replay is active:
 
@@ -563,6 +568,11 @@ The `predict_fault` callable loads effective threshold values at runtime with a
 - Threat-model status
 - Synthetic threat demo launch
 - Firestore retraining request queue
+- Live latest-request status banner for queued, in-progress, completed or failed states
+- System-admin callable `process_retrain_request`
+- Subprocess execution of `src.train` followed by `src.evaluate`
+- Completed requests include F1, RMSE and artifact SHA-256 values
+- Failed requests include stderr truncated to 4KB
 
 Retraining requests are written to `retrainRequests`. They do not automatically
 execute cloud retraining. The Python training pipeline must be run separately
@@ -1022,7 +1032,9 @@ android/
 
 1. Invalid or unavailable threshold configuration falls back to defaults, and
    warm inference instances can retain effective values for up to 60 seconds.
-2. Retraining is queued only; it is not automatically executed in Firebase.
+2. Retraining can now be invoked through `process_retrain_request`, but a real
+   executed training run was not verified in this environment. The runner dry-run
+   is verified and full execution remains a Firebase/runtime operation.
 3. The threat model is synthetic and cannot be treated as production threat
    detection.
 4. Threat replay creates `[SIMULATION]` alerts but does not persist replay feature

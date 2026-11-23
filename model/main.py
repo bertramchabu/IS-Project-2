@@ -710,6 +710,144 @@ def set_thresholds(request: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call(
     memory=options.MemoryOption.MB_512,
+    timeout_sec=3600,
+    max_instances=1,
+    region="us-central1",
+)
+def process_retrain_request(request: https_fn.CallableRequest) -> dict[str, Any]:
+    _require_system_admin(request)
+    assert request.auth is not None
+    data = request.data
+    if not isinstance(data, dict):
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="request_id is required.",
+        )
+    request_id = data.get("request_id")
+    dataset_path = data.get(
+        "dataset_path",
+        os.path.join(MODEL_DIR, "..", "data", "network_kpi_dataset.csv"),
+    )
+    if not isinstance(request_id, str) or not request_id.strip():
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="request_id is required.",
+        )
+
+    db = firestore.client()
+    ref = db.collection("retrainRequests").document(request_id.strip())
+    snapshot = ref.get()
+    if not snapshot.exists:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.NOT_FOUND,
+            message="Retrain request was not found.",
+        )
+    current = snapshot.to_dict() or {}
+    if current.get("status") not in {"Queued", "queued", "Pending", "pending"}:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            message="Only pending retrain requests can be processed.",
+        )
+
+    in_progress_at = datetime.now(timezone.utc)
+    ref.update({
+        "status": "in_progress",
+        "startedAt": in_progress_at,
+        "startedBy": request.auth.uid,
+    })
+    try:
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "src.train",
+                "--dataset",
+                str(dataset_path),
+            ],
+            cwd=os.path.dirname(MODEL_DIR),
+            capture_output=True,
+            text=True,
+            timeout=3600,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "Training failed:\n" + (result.stderr or result.stdout)[-4096:]
+            )
+
+        evaluation = subprocess.run(
+            [sys.executable, "-m", "src.evaluate"],
+            cwd=os.path.dirname(MODEL_DIR),
+            capture_output=True,
+            text=True,
+            timeout=3600,
+            check=False,
+        )
+        if evaluation.returncode != 0:
+            raise RuntimeError(
+                "Evaluation failed:\n" + (
+                    evaluation.stderr or evaluation.stdout
+                )[-4096:]
+            )
+
+        model_dir = MODEL_DIR
+        report_path = os.path.join(model_dir, "..", "results", "evaluation_report.json")
+        with open(report_path, "r", encoding="utf-8") as report_file:
+            report = json.load(report_file)
+        metrics = report.get("metrics", {})
+        hashes = {}
+        for name in (
+            "bilstm_fault_model.keras",
+            "bilstm_fault_model.tflite",
+            "scaler.joblib",
+            "model_metadata.json",
+        ):
+            path = os.path.join(model_dir, name)
+            if os.path.exists(path):
+                digest = hashlib.sha256()
+                with open(path, "rb") as artifact:
+                    for chunk in iter(lambda: artifact.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                hashes[name] = digest.hexdigest()
+
+        completed_at = datetime.now(timezone.utc)
+        artifact_ref = ref.collection("artifacts").document("evaluation_report")
+        artifact_ref.set({
+            "createdAt": completed_at,
+            "report": report,
+        })
+        ref.update({
+            "status": "completed",
+            "completedAt": completed_at,
+            "f1": metrics.get("f1_score"),
+            "rmse": metrics.get("rmse"),
+            "artifactSha256": hashes,
+        })
+        return {
+            "request_id": request_id.strip(),
+            "status": "completed",
+            "f1": metrics.get("f1_score"),
+            "rmse": metrics.get("rmse"),
+            "artifactSha256": hashes,
+        }
+    except Exception as error:
+        stderr = str(error)[-4096:]
+        ref.update({
+            "status": "failed",
+            "failedAt": datetime.now(timezone.utc),
+            "error": stderr,
+        })
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message="Retraining failed.",
+        ) from error
+
+
+@https_fn.on_call(
+    memory=options.MemoryOption.MB_512,
     timeout_sec=30,
     max_instances=5,
     region="us-central1",

@@ -14,6 +14,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import argparse
 from sklearn.preprocessing import StandardScaler
 from tensorflow import keras
 from keras import callbacks
@@ -29,7 +30,8 @@ def train_pipeline(
     window_size: int = 10,
     epochs: int = 25,
     batch_size: int = 64,
-    learning_rate: float = 0.001
+    learning_rate: float = 0.001,
+    dataset_path: str | os.PathLike | None = None,
 ):
     print("=" * 70)
     print("NetVision AI - BiLSTM Network Fault Anticipation Training Pipeline")
@@ -45,12 +47,18 @@ def train_pipeline(
     os.makedirs(results_dir, exist_ok=True)
     
     # 1. Dataset Generation
-    csv_path = os.path.join(data_dir, "network_kpi_dataset.csv")
-    print(f"\n[1/6] Generating realistic multivariate KPI dataset ({total_timesteps} samples/node)...")
-    nodes = ["Node-A_CoreSwitch", "Node-B_Gateway", "Node-C_Distribution", "Node-D_AccessPoint"]
-    df = generate_network_kpi_dataset(total_timesteps=total_timesteps, nodes=nodes, random_seed=42)
-    df.to_csv(csv_path, index=False)
-    print(f"Saved complete dataset to {csv_path} (Total rows: {len(df)})")
+    csv_path = os.fspath(dataset_path) if dataset_path else os.path.join(data_dir, "network_kpi_dataset.csv")
+    if dataset_path:
+        if not os.path.exists(csv_path):
+            raise FileNotFoundError(csv_path)
+        print(f"\n[1/6] Loading retraining KPI dataset ({csv_path})...")
+        df = pd.read_csv(csv_path)
+    else:
+        print(f"\n[1/6] Generating realistic multivariate KPI dataset ({total_timesteps} samples/node)...")
+        nodes = ["Node-A_CoreSwitch", "Node-B_Gateway", "Node-C_Distribution", "Node-D_AccessPoint"]
+        df = generate_network_kpi_dataset(total_timesteps=total_timesteps, nodes=nodes, random_seed=42)
+        df.to_csv(csv_path, index=False)
+    print(f"Saved/loaded complete dataset: {csv_path} (Total rows: {len(df)})")
     
     # 2. Chronological Train/Test Split (80% Train, 20% Held-out Test per Phase 3)
     print("\n[2/6] Performing chronological 80/20 train-test split per node...")
@@ -165,4 +173,7 @@ def train_pipeline(
     return model, X_test, y_test_bin, y_test_prob, time_test, node_test
 
 if __name__ == "__main__":
-    train_pipeline()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", default=None)
+    args = parser.parse_args()
+    train_pipeline(dataset_path=args.dataset)

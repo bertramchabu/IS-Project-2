@@ -70,6 +70,7 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
 
   // Requesting the offline Python training pipeline (FR-SA-09).
   bool _requestingRetrain = false;
+  Map<String, dynamic>? _latestRetrainRequest;
 
   // System health card readings.
   String _authStatus = 'checking…';
@@ -1770,6 +1771,48 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                       ),
                       const SizedBox(height: 8),
                     ],
+                    StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      stream: _firestore
+                          .collection('retrainRequests')
+                          .orderBy('requestedAt', descending: true)
+                          .limit(1)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData ||
+                            snapshot.data!.docs.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+                        final data =
+                            snapshot.data!.docs.first.data();
+                        final status =
+                            data['status'] as String? ?? 'unknown';
+                        final f1 = data['f1'];
+                        final rmse = data['rmse'];
+                        final details = status == 'completed'
+                            ? 'F1=$f1, RMSE=$rmse'
+                            : status == 'failed'
+                                ? (data['error'] as String? ??
+                                    'Retraining failed')
+                                : 'Request state: $status';
+                        return Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: _AdminColors.surfaceAlt,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: _AdminColors.border),
+                          ),
+                          child: Text(
+                            'Latest retrain: $details',
+                            style: const TextStyle(
+                              color: _AdminColors.textSecondary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -1855,13 +1898,21 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
     final user = _currentUser;
     setState(() => _requestingRetrain = true);
     try {
-      await _firestore.collection('retrainRequests').add({
+      final ref = await _firestore.collection('retrainRequests').add({
         'requestedBy': user?.userId ?? 'system_admin',
         'requestedByName': user?.username ?? 'System Administrator',
         'requestedAt': FieldValue.serverTimestamp(),
         'status': 'Queued',
         'note': 'Retrain BiLSTM with accumulated Firestore telemetry',
       });
+      if (mounted) {
+        setState(() {
+          _latestRetrainRequest = {
+            'id': ref.id,
+            'status': 'Queued',
+          };
+        });
+      }
       await _auditLog(
           AuditActions.retrainRequested, 'Queued BiLSTM retraining request');
       if (mounted) {
