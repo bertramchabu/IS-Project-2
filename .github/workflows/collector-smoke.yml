@@ -1,0 +1,21 @@
+name: NetVision Collector Smoke
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  loopback-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Start loopback HTTP target
+        run: python -m http.server 18080 --bind 127.0.0.1 &
+      - name: Run collector dry-run
+        working-directory: model
+        run: |
+          python -m pip install -r requirements.txt
+          python collector/agent.py --dry-run --config collector/config.example.yml --count 30

@@ -146,6 +146,21 @@ Bloc, and presentation structure:
 - FastAPI and Uvicorn for optional local REST serving
 - pytest/unittest for Python tests
 
+### Telemetry Collector
+
+The repository includes `model/collector/agent.py`, an on-ramp for real KPI
+collection. It probes TCP connection latency and derives jitter, TCP packet-loss
+rate and retransmission state. Signal strength is optional and is omitted cleanly
+when unavailable. `--dry-run` prints samples and performs no writes.
+
+Real writes require `NETVISION_COLLECTOR_KEY` to reference a Firebase service
+account file or `FIREBASE_EMULATOR=1`. Samples are written to
+`networkNodes/{nodeId}/kpiMetrics/{metricId}` with `source=collector`.
+
+The collector has not yet been used to establish a production dataset or real
+incident ground truth. The dashboard still also uses operator-entered Firestore
+telemetry, CSV replay and deterministic simulation.
+
 ## 6. Application Startup and Session Flow
 
 At startup, Flutter initializes Firebase using the generated platform-specific

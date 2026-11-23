@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -1378,6 +1379,70 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
           'Configure global prediction thresholds and dynamic computational load optimization',
         ),
         const SizedBox(height: 20),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _AdminColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _AdminColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'COLLECTOR ONBOARDING',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _AdminColors.textSecondary,
+                  letterSpacing: 1.1,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Run the dry-run agent to verify loopback samples. Real writes require NETVISION_COLLECTOR_KEY or FIREBASE_EMULATOR=1.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: _AdminColors.textMuted,
+                ),
+              ),
+              const SizedBox(height: 10),
+              SelectableText(
+                'python collector/agent.py --dry-run --config collector/config.example.yml --count 30',
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                  color: _AdminColors.accent,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      const ClipboardData(
+                        text:
+                            'python collector/agent.py --dry-run --config collector/config.example.yml --count 30',
+                      ),
+                    );
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Collector dry-run command copied'),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 14),
+                  label: const Text('Copy command'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
