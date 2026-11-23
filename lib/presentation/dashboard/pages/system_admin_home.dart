@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../../core/utils/app_error_logger.dart';
 import '../../../core/utils/csv_util.dart';
 import '../../../core/utils/platform_actions.dart';
+import '../../../core/utils/threshold_validation.dart';
 import '../../../data/repositories/audit_repository.dart';
 import '../../../data/repositories/model_inference_repository.dart';
 import '../../../data/repositories/threat_model_inference_repository.dart';
@@ -52,6 +53,9 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
   bool _adaptiveReductionEnabled = true;
   double _reductionThreshold = 0.30;
   int _reductionPercentage = 90;
+  double _healthyInterval = 10.0;
+  String? _thresholdValidationError;
+  String _thresholdConfigVersion = 'thresholds-v0';
   bool _isSavingConfig = false;
 
   // Real model status from the deployed model_status callable.
@@ -113,6 +117,31 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
   }
 
   Future<void> _loadThresholds() async {
+    try {
+      final callable = FirebaseFunctions.instanceFor(
+        region: 'us-central1',
+      ).httpsCallable('get_thresholds');
+      final result = await callable.call();
+      final effective = result.data as Map<Object?, Object?>;
+      if (mounted) {
+        setState(() {
+          _globalThreshold =
+              (effective['globalThreshold'] as num?)?.toDouble() ?? 0.70;
+          _adaptiveReductionEnabled =
+              effective['adaptiveReductionEnabled'] as bool? ?? true;
+          _reductionThreshold =
+              (effective['reductionThreshold'] as num?)?.toDouble() ?? 0.30;
+          _reductionPercentage =
+              (effective['reductionPercentage'] as num?)?.toInt() ?? 90;
+          _healthyInterval =
+              (effective['healthyInterval'] as num?)?.toDouble() ?? 10.0;
+          _thresholdConfigVersion =
+              effective['thresholdConfigVersion'] as String? ?? 'thresholds-v0';
+        });
+      }
+    } catch (error) {
+      AppErrorLogger.log('SystemAdminHome.loadEffectiveThresholds', error);
+    }
     try {
       final doc =
           await _firestore.collection('systemConfig').doc('thresholds').get();
@@ -1398,6 +1427,16 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                   ),
                 ],
               ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Effective config: $_thresholdConfigVersion',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: _AdminColors.textMuted,
+                  ),
+                ),
+              ),
               Slider(
                 value: _globalThreshold,
                 min: 0.50,
@@ -1503,6 +1542,17 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                 ),
               ],
               const SizedBox(height: 24),
+              if (_thresholdValidationError != null) ...[
+                Text(
+                  _thresholdValidationError!,
+                  style: const TextStyle(
+                    color: _AdminColors.critical,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
 
               // Save button
               Align(
@@ -1512,17 +1562,30 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
                       ? null
                       : () async {
                           setState(() => _isSavingConfig = true);
-                          await _firestore
-                              .collection('systemConfig')
-                              .doc('thresholds')
-                              .set({
+                          final validationError = ThresholdValidation.validate(
+                            globalThreshold: _globalThreshold,
+                            reductionThreshold: _reductionThreshold,
+                            reductionPercentage: _reductionPercentage,
+                            healthyInterval: _healthyInterval,
+                          );
+                          if (validationError != null) {
+                            setState(() {
+                              _thresholdValidationError = validationError;
+                              _isSavingConfig = false;
+                            });
+                            return;
+                          }
+                          setState(() => _thresholdValidationError = null);
+                          final callable = FirebaseFunctions.instanceFor(
+                            region: 'us-central1',
+                          ).httpsCallable('set_thresholds');
+                          await callable.call({
                             'globalThreshold': _globalThreshold,
                             'adaptiveReductionEnabled':
                                 _adaptiveReductionEnabled,
                             'reductionThreshold': _reductionThreshold,
                             'reductionPercentage': _reductionPercentage,
-                            'updatedAt': FieldValue.serverTimestamp(),
-                            'updatedBy': user?.userId ?? 'admin',
+                            'healthyInterval': _healthyInterval,
                           });
                           await _auditLog(
                             AuditActions.thresholdUpdated,

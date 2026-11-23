@@ -30,10 +30,6 @@ FEATURES = (
     "signal_strength",
 )
 WINDOW_SIZE = 10
-ALERT_THRESHOLD = 0.70
-WARNING_THRESHOLD = 0.30
-HEALTHY_SAMPLING_INTERVAL_SEC = 10.0
-THRESHOLD_CONFIG_VERSION = "fault-thresholds-v1"
 MANAGED_USER_ROLES = {
     "role_network_admin",
     "role_ict_manager",
@@ -51,6 +47,8 @@ _scaler_version: str | None = None
 _threat_tree: dict[str, Any] | None = None
 _threat_risk: dict[str, Any] | None = None
 _threat_ood: Any = None
+_threshold_cache: dict[str, Any] | None = None
+_threshold_cache_loaded_at = 0.0
 
 THREAT_FEATURES = (
     "packets_per_sec",
@@ -88,6 +86,114 @@ THREAT_ARTIFACT_HASHES = {
     "risk.joblib": "5a7a92322faea3d7080403d3f7e2be2c20763ce96915c7c166014b4715326e71",
     "ood.joblib": "1a7b509680aee167c3574b96637e88b8dedfab1df0b0a597440c3f2b43eb6a54",
 }
+
+
+DEFAULT_THRESHOLD_CONFIG = {
+    "globalThreshold": 0.70,
+    "reductionThreshold": 0.30,
+    "reductionPercentage": 90,
+    "healthyInterval": 10.0,
+    "adaptiveReductionEnabled": True,
+}
+
+
+def _validate_threshold_config(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise ValueError("Threshold configuration must be an object.")
+
+    global_threshold = data.get("globalThreshold")
+    reduction_threshold = data.get("reductionThreshold")
+    reduction_percentage = data.get("reductionPercentage")
+    healthy_interval = data.get("healthyInterval", 10.0)
+    adaptive_reduction_enabled = data.get("adaptiveReductionEnabled", True)
+
+    if (
+        not isinstance(global_threshold, (int, float))
+        or isinstance(global_threshold, bool)
+        or not 0.5 <= float(global_threshold) <= 0.95
+    ):
+        raise ValueError("globalThreshold must be between 0.5 and 0.95.")
+    if (
+        not isinstance(reduction_threshold, (int, float))
+        or isinstance(reduction_threshold, bool)
+        or not 0.1 <= float(reduction_threshold) < float(global_threshold)
+    ):
+        raise ValueError(
+            "reductionThreshold must be at least 0.1 and less than globalThreshold."
+        )
+    if (
+        not isinstance(reduction_percentage, (int, float))
+        or isinstance(reduction_percentage, bool)
+        or not 50 <= float(reduction_percentage) <= 95
+        or int(reduction_percentage) != float(reduction_percentage)
+    ):
+        raise ValueError("reductionPercentage must be an integer from 50 to 95.")
+    if (
+        not isinstance(healthy_interval, (int, float))
+        or isinstance(healthy_interval, bool)
+        or not 1 <= float(healthy_interval) <= 60
+    ):
+        raise ValueError("healthyInterval must be between 1 and 60 seconds.")
+    if not isinstance(adaptive_reduction_enabled, bool):
+        raise ValueError("adaptiveReductionEnabled must be a boolean.")
+
+    return {
+        "globalThreshold": float(global_threshold),
+        "reductionThreshold": float(reduction_threshold),
+        "reductionPercentage": int(reduction_percentage),
+        "healthyInterval": float(healthy_interval),
+        "adaptiveReductionEnabled": adaptive_reduction_enabled,
+    }
+
+
+def _threshold_config_version(data: dict[str, Any] | None) -> str:
+    if not isinstance(data, dict):
+        return "thresholds-v0"
+    updated_at = data.get("updatedAt")
+    if hasattr(updated_at, "timestamp"):
+        try:
+            timestamp = int(updated_at.timestamp())
+            if timestamp >= 0:
+                return f"thresholds-v{timestamp}"
+        except (TypeError, ValueError, OverflowError):
+            pass
+    return "thresholds-v0"
+
+
+def _load_thresholds(force: bool = False) -> tuple[dict[str, Any], str]:
+    global _threshold_cache, _threshold_cache_loaded_at
+    now = time.monotonic()
+    if (
+        not force
+        and _threshold_cache is not None
+        and now - _threshold_cache_loaded_at < 60
+    ):
+        return _threshold_cache, _threshold_config_version(_threshold_cache)
+
+    try:
+        snapshot = (
+            firestore.client()
+            .collection("systemConfig")
+            .document("thresholds")
+            .get()
+        )
+        document = snapshot.to_dict() if snapshot.exists else None
+        if document is None:
+            effective = dict(DEFAULT_THRESHOLD_CONFIG)
+            version = "thresholds-v0"
+        else:
+            effective = _validate_threshold_config(document)
+            effective["updatedAt"] = document.get("updatedAt")
+            version = _threshold_config_version(document)
+    except Exception as error:
+        print(f"Threshold config load failed; using defaults: {error}")
+        effective = dict(DEFAULT_THRESHOLD_CONFIG)
+        effective["updatedAt"] = None
+        version = "thresholds-v0"
+
+    _threshold_cache = effective
+    _threshold_cache_loaded_at = now
+    return effective, version
 
 
 def _load_assets() -> None:
@@ -539,6 +645,75 @@ def create_managed_user(request: https_fn.CallableRequest) -> dict[str, str]:
     max_instances=5,
     region="us-central1",
 )
+def get_thresholds(request: https_fn.CallableRequest) -> dict[str, Any]:
+    _require_system_admin(request)
+    effective, version = _load_thresholds(force=True)
+    return {
+        "globalThreshold": effective["globalThreshold"],
+        "adaptiveReductionEnabled": effective.get("adaptiveReductionEnabled", True),
+        "reductionThreshold": effective["reductionThreshold"],
+        "reductionPercentage": effective["reductionPercentage"],
+        "healthyInterval": effective["healthyInterval"],
+        "thresholdConfigVersion": version,
+    }
+
+
+@https_fn.on_call(
+    memory=options.MemoryOption.MB_512,
+    timeout_sec=30,
+    max_instances=5,
+    region="us-central1",
+)
+def set_thresholds(request: https_fn.CallableRequest) -> dict[str, Any]:
+    _require_system_admin(request)
+    assert request.auth is not None
+    data = request.data
+    if not isinstance(data, dict):
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="Threshold configuration must be an object.",
+        )
+    try:
+        effective = _validate_threshold_config(data)
+    except ValueError as error:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message=str(error),
+        ) from error
+
+    adaptive = effective["adaptiveReductionEnabled"]
+
+    db = firestore.client()
+    updated_at = datetime.now(timezone.utc)
+    db.collection("systemConfig").document("thresholds").set(
+        {
+            **effective,
+            "adaptiveReductionEnabled": adaptive,
+            "updatedAt": updated_at,
+            "updatedBy": request.auth.uid,
+        },
+        merge=True,
+    )
+    global _threshold_cache, _threshold_cache_loaded_at
+    _threshold_cache = {
+        **effective,
+        "adaptiveReductionEnabled": adaptive,
+        "updatedAt": updated_at,
+    }
+    _threshold_cache_loaded_at = time.monotonic()
+    return {
+        **effective,
+        "adaptiveReductionEnabled": adaptive,
+        "thresholdConfigVersion": _threshold_config_version(_threshold_cache),
+    }
+
+
+@https_fn.on_call(
+    memory=options.MemoryOption.MB_512,
+    timeout_sec=30,
+    max_instances=5,
+    region="us-central1",
+)
 def model_status(request: https_fn.CallableRequest) -> dict[str, Any]:
     _require_active_user(request)
     try:
@@ -645,6 +820,12 @@ def predict_threat(request: https_fn.CallableRequest) -> dict[str, Any]:
 def predict_fault(request: https_fn.CallableRequest) -> dict[str, Any]:
     profile = _require_network_admin(request)
     assert request.auth is not None
+    threshold_config, threshold_config_version = _load_thresholds()
+    alert_threshold = threshold_config["globalThreshold"]
+    warning_threshold = threshold_config["reductionThreshold"]
+    healthy_sampling_interval = threshold_config["healthyInterval"]
+    reduction_percentage = threshold_config["reductionPercentage"]
+    adaptive_reduction_enabled = threshold_config["adaptiveReductionEnabled"]
     data = request.data
     if not isinstance(data, dict):
         raise https_fn.HttpsError(
@@ -753,20 +934,22 @@ def predict_fault(request: https_fn.CallableRequest) -> dict[str, Any]:
             message="Model inference failed. Check the deployed model artifacts.",
         ) from error
 
-    if probability >= ALERT_THRESHOLD:
+    if probability >= alert_threshold:
         status, severity, alert_triggered = "CRITICAL_ALERT", "HIGH", True
         message = f"Fault probability {probability:.1%} exceeded the alert threshold."
-    elif probability >= WARNING_THRESHOLD:
+    elif probability >= warning_threshold:
         status, severity, alert_triggered = "WARNING", "MEDIUM", False
         message = f"Degradation precursor detected ({probability:.1%})."
     else:
         status, severity, alert_triggered = "HEALTHY", "NORMAL", False
         message = (
             f"Fault probability is {probability:.1%}; sampling reduced to "
-            f"every {HEALTHY_SAMPLING_INTERVAL_SEC:g} seconds."
+            f"every {healthy_sampling_interval:g} seconds."
+            if adaptive_reduction_enabled
+            else f"Fault probability is {probability:.1%}; adaptive reduction is disabled."
         )
 
-    healthy = probability < WARNING_THRESHOLD
+    healthy = probability < warning_threshold and adaptive_reduction_enabled
     prediction_id = uuid4().hex
     prediction_timestamp = datetime.now(timezone.utc)
     model_version = _metadata_value("version_number") or "unknown"
@@ -779,14 +962,16 @@ def predict_fault(request: https_fn.CallableRequest) -> dict[str, Any]:
         "alert_triggered": alert_triggered,
         "inference_latency_ms": round(inference_latency_ms, 2),
         "next_sampling_interval_sec": (
-            HEALTHY_SAMPLING_INTERVAL_SEC if healthy else 1.0
+            healthy_sampling_interval if healthy else 1.0
         ),
-        "computational_savings_percent": 90 if healthy else 0,
+        "adaptive_reduction_applied": healthy,
+        "computational_savings_percent": reduction_percentage if healthy else 0,
         "message": message,
         "timestamp": prediction_timestamp.timestamp(),
         "prediction_id": prediction_id,
         "input_timestamp_utc": input_timestamp.isoformat(),
         "model_version": model_version,
+        "thresholdConfigVersion": threshold_config_version,
     }
 
     if demo_only:
@@ -808,10 +993,10 @@ def predict_fault(request: https_fn.CallableRequest) -> dict[str, Any]:
         "modelInputWindow": input_window,
         "modelVersion": model_version,
         "scalerVersion": scaler_version,
-        "thresholdConfigVersion": THRESHOLD_CONFIG_VERSION,
+        "thresholdConfigVersion": threshold_config_version,
         "thresholds": {
-            "warning": WARNING_THRESHOLD,
-            "alert": ALERT_THRESHOLD,
+            "warning": warning_threshold,
+            "alert": alert_threshold,
         },
         "inferenceResult": inference_result,
         "inferenceTimestampUtc": prediction_timestamp.isoformat(),
@@ -833,7 +1018,7 @@ def predict_fault(request: https_fn.CallableRequest) -> dict[str, Any]:
         "payloadHashSha256": hashlib.sha256(payload_json.encode("utf-8")).hexdigest(),
         "modelVersion": str(model_version),
         "scalerVersion": str(scaler_version),
-        "thresholdConfigVersion": THRESHOLD_CONFIG_VERSION,
+        "thresholdConfigVersion": threshold_config_version,
         "dataQualityFlags": [],
     }
 
@@ -851,16 +1036,16 @@ def predict_fault(request: https_fn.CallableRequest) -> dict[str, Any]:
         "faultProbability": round(probability, 4),
         "inputFeatures": values[-1],
         "inferenceTimeMs": round(inference_latency_ms, 2),
-        "adaptiveReductionApplied": False,
+        "adaptiveReductionApplied": healthy,
         "predictionTimestamp": prediction_timestamp,
         "inputTimestamp": input_timestamp,
         "triggeredBy": "Firebase BiLSTM Function",
         "status": status,
         "message": message,
         "alertTriggered": alert_triggered,
-        "computationalSavingsPercent": 90 if healthy else 0,
+        "computationalSavingsPercent": reduction_percentage if healthy else 0,
         "nextSamplingIntervalSeconds": (
-            HEALTHY_SAMPLING_INTERVAL_SEC if healthy else 1.0
+            healthy_sampling_interval if healthy else 1.0
         ),
         "modelF1Score": _metadata_value("f1_score"),
         "modelRmse": _metadata_value("rmse"),
