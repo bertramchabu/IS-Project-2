@@ -71,7 +71,6 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
 
   // Requesting the offline Python training pipeline (FR-SA-09).
   bool _requestingRetrain = false;
-  Map<String, dynamic>? _latestRetrainRequest;
 
   // System health card readings.
   String _authStatus = 'checking…';
@@ -1963,21 +1962,13 @@ class _SystemAdminHomeState extends State<SystemAdminHome> {
     final user = _currentUser;
     setState(() => _requestingRetrain = true);
     try {
-      final ref = await _firestore.collection('retrainRequests').add({
+      await _firestore.collection('retrainRequests').add({
         'requestedBy': user?.userId ?? 'system_admin',
         'requestedByName': user?.username ?? 'System Administrator',
         'requestedAt': FieldValue.serverTimestamp(),
         'status': 'Queued',
         'note': 'Retrain BiLSTM with accumulated Firestore telemetry',
       });
-      if (mounted) {
-        setState(() {
-          _latestRetrainRequest = {
-            'id': ref.id,
-            'status': 'Queued',
-          };
-        });
-      }
       await _auditLog(
           AuditActions.retrainRequested, 'Queued BiLSTM retraining request');
       if (mounted) {
