@@ -1,49 +1,136 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/material.dart';
-import 'package:netvision_ai/firebase_options.dart';
+import 'dart:async';
 
-void main() async {
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:netvision_ai/presentation/dashboard/bloc/kpi_bloc.dart';
+
+import 'firebase_options.dart';
+import 'di/service_locator.dart' as di;
+import 'core/router/app_router.dart';
+import 'presentation/auth/bloc/auth_bloc.dart';
+import 'presentation/auth/bloc/auth_event.dart';
+import 'presentation/auth/bloc/auth_state.dart';
+import 'services/push_notification_service.dart';
+
+final _navigatorKey = GlobalKey<NavigatorState>();
+final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const NetVisionAI());
+  await di.init();
+  runApp(const NetVisionApp());
+  unawaited(
+    di.sl<PushNotificationService>().initialize(
+          navigatorKey: _navigatorKey,
+          scaffoldMessengerKey: _scaffoldMessengerKey,
+        ),
+  );
 }
 
-
-class NetVisionAI extends StatelessWidget {
-  const NetVisionAI({super.key});
+class NetVisionApp extends StatelessWidget {
+  const NetVisionApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'NetVision AI',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        colorSchemeSeed: Colors.cyan,
-        useMaterial3: true
-        
-      ),
-      home: const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.radar, size: 96, color: Colors.cyanAccent,),
-              SizedBox(height: 24,),
-              Text(
-                'NetVision AI',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold
-                ),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider<AuthBloc>(
+          create: (_) => di.sl<AuthBloc>()..add(const AuthCheckRequested()),
+        ),
+        BlocProvider<KpiBloc>(
+          create: (_) => di.sl<KpiBloc>(),
+        ),
+      ],
+      child: MaterialApp(
+        navigatorKey: _navigatorKey,
+        scaffoldMessengerKey: _scaffoldMessengerKey,
+        title: 'NetVision AI',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          brightness: Brightness.dark,
+          colorSchemeSeed: Colors.cyan,
+          scaffoldBackgroundColor: const Color(0xFF070B14),
+          useMaterial3: true,
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Color(0xC9121B2B),
+            foregroundColor: Color(0xFFF1F5F9),
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+          ),
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: const Color(0xFF111C2C).withValues(alpha: 0.72),
+            labelStyle: const TextStyle(color: Color(0xFFB5C3D8)),
+            hintStyle: const TextStyle(color: Color(0xFF7789A3)),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: Colors.white.withValues(alpha: 0.12),
               ),
-              SizedBox(height: 8,),
-              Text('Firebase connected!'),
-
-          ],),
-        )
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: Colors.white.withValues(alpha: 0.14),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide:
+                  const BorderSide(color: Color(0xFF00D9FF), width: 1.4),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFFF5577)),
+            ),
+          ),
+          cardTheme: CardThemeData(
+            color: const Color(0xCC152033),
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+            ),
+          ),
+          dialogTheme: DialogThemeData(
+            backgroundColor: const Color(0xF2111928),
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+            ),
+          ),
+          snackBarTheme: SnackBarThemeData(
+            backgroundColor: const Color(0xF2111928),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+            ),
+          ),
+        ),
+        home: BlocListener<AuthBloc, AuthState>(
+          listenWhen: (_, state) =>
+              (state is AuthError && state.user != null) ||
+              state is AuthAuthenticated,
+          listener: (context, state) {
+            if (state is AuthError) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(state.message)),
+              );
+            } else if (state is AuthAuthenticated) {
+              unawaited(di.sl<PushNotificationService>().openPendingAlert());
+            }
+          },
+          child: BlocBuilder<AuthBloc, AuthState>(
+            builder: (context, state) => AppRouter.route(state),
+          ),
+        ),
       ),
     );
   }

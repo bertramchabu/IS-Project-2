@@ -1,0 +1,13 @@
+{
+  "model_version": "threat-synthetic-v1-tree",
+  "dataset_version": "threat-synthetic-v1",
+  "simulation_only": true,
+  "window_seconds": 60,
+  "classifier": "HistGradientBoostingClassifier with validation-fitted calibration and abstention",
+  "forecast_horizon_minutes": 10,
+  "artifact_sha256": {
+    "tree.joblib": "1e70385b1c8c0532f8007137b52f70511a8f57edf2d01c85e97f717bba26b2a8",
+    "risk.joblib": "5a7a92322faea3d7080403d3f7e2be2c20763ce96915c7c166014b4715326e71",
+    "ood.joblib": "1a7b509680aee167c3574b96637e88b8dedfab1df0b0a597440c3f2b43eb6a54"
+  }
+}

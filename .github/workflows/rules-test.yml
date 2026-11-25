@@ -1,0 +1,18 @@
+name: NetVision Firestore Rules
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rules-spec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Flutter dependencies
+        run: flutter pub get
+      - name: Run rules specification test
+        run: flutter test test/firestore_rules/rules_test.dart --reporter expanded

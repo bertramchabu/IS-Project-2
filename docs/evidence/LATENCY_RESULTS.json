@@ -1,0 +1,11 @@
+{
+  "status": "NOT_RUN",
+  "reason": "Deployed Firebase callable URL and authenticated benchmark client were not available.",
+  "N": 0,
+  "p50Ms": null,
+  "p95Ms": null,
+  "p99Ms": null,
+  "meanMs": null,
+  "stddevMs": null,
+  "timestampUtc": null
+}

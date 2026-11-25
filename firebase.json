@@ -1,1 +1,74 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"netvision-ai-0","appId":"1:823236743234:android:79bc15917cd2d9fe855ddb","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"netvision-ai-0","configurations":{"android":"1:823236743234:android:79bc15917cd2d9fe855ddb","web":"1:823236743234:web:9eef3870db5cb57b855ddb"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "runtime": "nodejs24",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ]
+    },
+    {
+      "source": "model",
+      "codebase": "model",
+      "runtime": "python311",
+      "ignore": [
+        ".git",
+        ".firebase",
+        ".firebaseignore",
+        "venv",
+        ".venv",
+        "__pycache__",
+        "api",
+        "data",
+        "results",
+        "src",
+        "README.md",
+        ".gitignore",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ]
+    }
+  ],
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "netvision-ai-0",
+          "appId": "1:823236743234:android:79bc15917cd2d9fe855ddb",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "netvision-ai-0",
+          "configurations": {
+            "android": "1:823236743234:android:79bc15917cd2d9fe855ddb",
+            "web": "1:823236743234:web:9eef3870db5cb57b855ddb"
+          }
+        }
+      }
+    }
+  }
+}

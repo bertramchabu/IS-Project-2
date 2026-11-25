@@ -1,0 +1,12 @@
+{
+  "cases": [
+    {"name":"active network role can read nodes","role":"role_network_admin","isActive":true,"allow":true},
+    {"name":"inactive user cannot read nodes","role":"role_network_admin","isActive":false,"allow":false},
+    {"name":"ICT manager cannot create managed users","role":"role_ict_manager","isActive":true,"allow":false},
+    {"name":"forensic evidence remains immutable","role":"role_system_admin","isActive":true,"allowUpdate":false},
+    {"name":"threat feature windows remain immutable","role":"role_network_admin","isActive":true,"allowUpdate":false},
+    {"name":"device write is limited to token platform updatedAt","role":"role_network_admin","isActive":true,"allow":true},
+    {"name":"unknown role is not network administrator","role":"role_owner","isActive":true,"allow":false}
+  ],
+  "status": "specification-only; emulator execution not available in this turn"
+}

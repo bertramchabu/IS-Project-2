@@ -1,0 +1,262 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDocument(userId) {
+      return /databases/$(database)/documents/users/$(userId);
+    }
+
+    function activeUser() {
+      return signedIn()
+        && exists(userDocument(request.auth.uid))
+        && get(userDocument(request.auth.uid)).data.get('isActive', true) == true;
+    }
+
+    function hasRole(roleId) {
+      return activeUser()
+        && get(userDocument(request.auth.uid)).data.get('roleId', '') == roleId;
+    }
+
+    function isSystemAdmin() {
+      return hasRole('role_system_admin');
+    }
+
+    function isNetworkAdmin() {
+      return hasRole('role_network_admin');
+    }
+
+    function canManageAlerts() {
+      return isNetworkAdmin() || isSystemAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if signedIn()
+        && (request.auth.uid == userId || isSystemAdmin());
+      allow list: if isSystemAdmin();
+      allow create, delete: if isSystemAdmin();
+      allow update: if (isSystemAdmin()
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['mfaEnabled']))
+        || (signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly([
+              'username',
+              'department',
+              'phoneNumber',
+              'lastLogin',
+              'updatedAt'
+            ]));
+
+      match /devices/{deviceId} {
+        allow read: if signedIn()
+          && (request.auth.uid == userId || isSystemAdmin());
+        allow create, update: if signedIn()
+          && request.auth.uid == userId
+          && activeUser()
+          && request.resource.data.keys().hasOnly([
+            'token',
+            'platform',
+            'updatedAt'
+          ])
+          && request.resource.data.keys().hasAll([
+            'token',
+            'platform',
+            'updatedAt'
+          ])
+          && request.resource.data.token is string
+          && request.resource.data.platform in ['android', 'web'];
+        allow delete: if signedIn()
+          && (request.auth.uid == userId || isSystemAdmin());
+      }
+    }
+
+    match /networkNodes/{nodeId} {
+      allow read: if activeUser();
+      allow create, update, delete: if isSystemAdmin();
+
+      match /kpiMetrics/{metricId} {
+        allow read: if activeUser();
+      }
+
+      match /predictions/{predictionId} {
+        allow read: if activeUser();
+      }
+
+      match /alerts/{alertId} {
+        allow read: if activeUser();
+        allow create: if canManageAlerts()
+          && request.resource.data.status == 'Active'
+          && request.resource.data.nodeId == nodeId
+          && request.resource.data.keys().hasOnly([
+            'nodeId',
+            'predictionId',
+            'severityId',
+            'status',
+            'title',
+            'description',
+            'faultProbability',
+            'modelVersionId',
+            'createdAt'
+          ])
+          && request.resource.data.keys().hasAll([
+            'nodeId',
+            'predictionId',
+            'severityId',
+            'status',
+            'title',
+            'description',
+            'faultProbability',
+            'createdAt'
+          ]);
+        allow update: if canManageAlerts()
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly([
+              'status',
+              'acknowledgedBy',
+              'acknowledgedAt',
+              'dismissalReason',
+              'resolvedAt'
+            ])
+          && (
+            (request.resource.data.status == 'Acknowledged'
+              && request.resource.data.acknowledgedBy == request.auth.uid
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasAll(['status', 'acknowledgedBy', 'acknowledgedAt']))
+            || (request.resource.data.status == 'Dismissed'
+              && request.resource.data.acknowledgedBy == request.auth.uid
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasAll([
+                  'status',
+                  'acknowledgedBy',
+                  'acknowledgedAt',
+                  'dismissalReason'
+                ]))
+            || (request.resource.data.status == 'Resolved'
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasAll(['status', 'resolvedAt']))
+          );
+      }
+    }
+
+    match /{path=**}/alerts/{alertId} {
+      allow read: if activeUser();
+    }
+
+    match /{path=**}/kpiMetrics/{metricId} {
+      allow read: if activeUser();
+    }
+
+    match /systemConfig/{configId} {
+      allow read: if activeUser();
+      allow write: if isSystemAdmin();
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isSystemAdmin();
+      allow create: if activeUser()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'userId',
+          'userName',
+          'action',
+          'details',
+          'timestamp'
+        ])
+        && request.resource.data.keys().hasAll([
+          'userId',
+          'userName',
+          'action',
+          'details',
+          'timestamp'
+        ]);
+    }
+
+    match /retrainRequests/{requestId} {
+      allow read, create: if isSystemAdmin();
+    }
+
+    match /threatFeatureWindows/{windowId} {
+      allow read: if canManageAlerts();
+      allow create: if canManageAlerts()
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.keys().hasAll([
+          'nodeId',
+          'serviceId',
+          'windowStartUtc',
+          'windowEndUtc',
+          'rates',
+          'dataQualityFlags',
+          'sourceTimestampUtc',
+          'ingestionTimeUtc',
+          'assessmentId'
+        ]);
+      allow update, delete: if false;
+    }
+
+    match /threatAssessments/{assessmentId} {
+      allow read: if canManageAlerts();
+      allow create: if canManageAlerts()
+        && request.resource.data.keys().hasAll([
+          'nodeId',
+          'serviceId',
+          'category',
+          'observationStartUtc',
+          'observationEndUtc',
+          'recommendedAction',
+          'createdBy',
+          'featureWindowId',
+          'evidenceId',
+          'thresholdConfigVersion'
+        ])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.category in [
+          'BENIGN',
+          'AVAILABILITY_ANOMALY',
+          'OPERATIONAL_FAULT',
+          'UNKNOWN'
+        ];
+      allow update: if canManageAlerts()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status in [
+          'Acknowledged',
+          'Dismissed',
+          'Resolved'
+        ];
+      allow delete: if false;
+    }
+
+    match /forensicEvidence/{evidenceId} {
+      allow read: if isSystemAdmin();
+      allow create: if canManageAlerts()
+        && request.resource.data.actorUserId == request.auth.uid
+        && request.resource.data.recordType in [
+          'fault_inference',
+          'threat_inference',
+          'alert_event',
+          'admin_action',
+          'config_change',
+          'model_promotion'
+        ]
+        && request.resource.data.keys().hasAll([
+          'recordType',
+          'timestampUtc',
+          'ingestionTimeUtc',
+          'actorUserId',
+          'resourceId',
+          'payloadJson',
+          'payloadHashSha256',
+          'modelVersion',
+          'scalerVersion',
+          'thresholdConfigVersion',
+          'dataQualityFlags'
+        ]);
+      allow update, delete: if false;
+    }
+  }
+}

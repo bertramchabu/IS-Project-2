@@ -1,0 +1,11 @@
+{
+    "version_number": "v1.2.0",
+    "architecture": "Bidirectional LSTM",
+    "hidden_units": 64,
+    "layers": 2,
+    "dropout_rate": 0.2,
+    "f1_score": 0.8593,
+    "rmse": 0.0197,
+    "file_path": "models/bilstm_fault_model.keras",
+    "trained_at": "2026-10-16 00:17:16"
+}

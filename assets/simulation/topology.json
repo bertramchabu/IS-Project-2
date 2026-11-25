@@ -1,0 +1,15 @@
+{
+  "layers": ["L3", "L2", "L1"],
+  "links": [
+    {"id":"hq-primary","from":"hq-cr-1","to":"hq-fw-1","layer":"L3","capacityMbps":10000,"utilizationCurve":"business_hours"},
+    {"id":"hq-secondary","from":"hq-cr-2","to":"hq-fw-2","layer":"L3","capacityMbps":10000,"utilizationCurve":"business_hours"},
+    {"id":"mombasa-wan","from":"mombasa-dr-er","to":"hq-cr-1","layer":"L3","capacityMbps":1000,"utilizationCurve":"business_hours"},
+    {"id":"nakuru-wan","from":"nak-edge","to":"hq-cr-1","layer":"L3","capacityMbps":500,"utilizationCurve":"business_hours"},
+    {"id":"kisumu-wan","from":"kis-edge","to":"hq-cr-2","layer":"L3","capacityMbps":500,"utilizationCurve":"business_hours"}
+  ],
+  "uplinkPaths": {
+    "Safaricom": ["hq-isp-1","hq-fw-1","hq-cr-1"],
+    "Airtel": ["hq-isp-2","hq-fw-2","hq-cr-2"],
+    "Liquid": ["hq-isp-1","hq-fw-1","hq-cr-2"]
+  }
+}

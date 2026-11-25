@@ -1,0 +1,12 @@
+{
+  "seed": 166458,
+  "scenarios": [
+    {"name": "normal_business_hours", "description": "Normal Kenyan retail operating period", "durationSeconds": 300},
+    {"name": "morning_pos_peak", "description": "POS traffic peak", "durationSeconds": 300},
+    {"name": "cctv_backhaul_degradation", "description": "CCTV link degradation", "durationSeconds": 300},
+    {"name": "isp_failover_test", "description": "Primary ISP failover", "durationSeconds": 300},
+    {"name": "ddos_availability_anomaly", "description": "Synthetic availability anomaly", "durationSeconds": 300},
+    {"name": "operational_fault_warning", "description": "Synthetic service-health fault", "durationSeconds": 300},
+    {"name": "combined_cascading_failure", "description": "Combined cascading WAN failure", "durationSeconds": 300}
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "Savannah Retail Group",
+  "country": "Kenya",
+  "staffCount": 1200,
+  "supermarketCount": 24,
+  "deviceCount": 42,
+  "sites": ["Nairobi HQ", "Mombasa DR", "Nakuru", "Kisumu", "24 retail branches"],
+  "businessUnits": ["POS", "CCTV backhaul", "VoIP", "WAN", "cloud ERP", "email", "staff Wi-Fi", "guest Wi-Fi"],
+  "compliance": ["PCI-DSS", "Kenya Data Protection Act 2019"],
+  "isps": ["Safaricom", "Airtel", "Liquid"],
+  "slas": {
+    "POS": {"availability": 99.95, "latencyMs": 800},
+    "CCTV": {"availability": 99.9, "startSeconds": 3},
+    "VoIP": {"availability": 99.9, "oneWayLatencyMs": 300},
+    "ERP": {"availability": 99.5, "availabilityWindow": "business hours"}
+  },
+  "personas": {
+    "ictManager": "Grace Mwangi",
+    "systemAdmin": "Peter Otieno",
+    "networkAdmin": "Faith Njeri"
+  },
+  "simulationOnly": true
+}

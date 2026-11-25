@@ -1,0 +1,26 @@
+{
+    "model_name": "NetVision AI BiLSTM Fault Anticipation Model",
+    "author": "Chabu Bertram Brian",
+    "student_id": "166458",
+    "institution": "Strathmore University",
+    "evaluation_timestamp": "2026-10-16 00:17:16",
+    "metrics": {
+        "f1_score": 0.8593,
+        "rmse": 0.0197,
+        "precision": 1.0,
+        "recall": 0.7533,
+        "accuracy": 0.9353,
+        "roc_auc": 0.9999,
+        "true_positives": 1890,
+        "false_positives": 0,
+        "false_negatives": 619,
+        "true_negatives": 7055,
+        "single_inference_latency_ms": 972.45,
+        "decision_threshold": 0.65
+    },
+    "target_compliance": {
+        "f1_target_met": true,
+        "rmse_target_met": true,
+        "latency_target_met": true
+    }
+}

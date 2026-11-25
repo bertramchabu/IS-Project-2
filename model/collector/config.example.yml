@@ -1,0 +1,13 @@
+targets:
+  - nodeId: SYNTHETIC-DEMO-NODE
+    host: 127.0.0.1
+    port: 18080
+    intervalSeconds: 1
+  - nodeId: SYNTHETIC-DEMO-NODE-2
+    host: 127.0.0.1
+    port: 18080
+    intervalSeconds: 1
+  - nodeId: SYNTHETIC-DEMO-NODE-3
+    host: 127.0.0.1
+    port: 18080
+    intervalSeconds: 1
